@@ -51,8 +51,9 @@ function ActivityCard({ accent, icon, kicker, title, meta, thumb, onClick, delay
   );
 }
 
-export default function PageAccueil({ role, onNav, onOpen, onAuth }: {
+export default function PageAccueil({ role, displayName = '', onNav, onOpen, onAuth }: {
   role: string;
+  displayName?: string;
   onNav: (p: string) => void;
   onOpen: (type: string, item: unknown) => void;
   onAuth: (mode: string) => void;
@@ -62,7 +63,7 @@ export default function PageAccueil({ role, onNav, onOpen, onAuth }: {
 
   const hour = new Date().getHours();
   const greet = hour < 5 ? 'Bonne nuit' : hour < 12 ? 'Bonjour' : hour < 18 ? 'Bel après-midi' : 'Bonsoir';
-  const name = role === 'visiteur' ? '' : (role === 'etudiant' ? ', Abel' : ', Grâce');
+  const name = role === 'visiteur' ? '' : (displayName ? ', ' + displayName : '');
   const e = activity.enseignement;
 
   return (

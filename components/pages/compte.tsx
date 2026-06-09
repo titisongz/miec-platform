@@ -6,6 +6,7 @@ import { Reveal, Toggle, Sheet, Spinner } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import type { FavItem, AccentKey } from '@/lib/types';
 import DB from '@/lib/data';
+import { supabase } from '@/lib/supabase';
 
 /* ---------- Auth screen ---------- */
 export function AuthScreen({ mode: initial = 'login', onLogin }: {
@@ -15,8 +16,72 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
   const signup = mode === 'signup';
   const [f, setF] = useState({ nom: '', email: '', pass: '' });
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [confirmSent, setConfirmSent] = useState(false);
   const ok = f.email && f.pass && (!signup || f.nom);
-  function go() { if (!ok) return; setBusy(true); setTimeout(() => onLogin(), 1100); }
+
+  function mapError(msg: string): string {
+    if (msg.includes('Invalid login credentials')) return 'Email ou mot de passe incorrect.';
+    if (msg.includes('already registered') || msg.includes('user_already_exists')) return 'Un compte avec cet email existe déjà.';
+    if (msg.includes('Email not confirmed')) return 'Confirmez votre email avant de vous connecter.';
+    if (msg.includes('Password should be') || msg.includes('password')) return 'Le mot de passe doit faire au moins 6 caractères.';
+    if (msg.includes('rate limit') || msg.includes('over_email')) return 'Trop de tentatives. Réessayez dans quelques minutes.';
+    return 'Une erreur est survenue. Réessayez.';
+  }
+
+  async function go() {
+    if (!ok) return;
+    setBusy(true);
+    setErr('');
+    try {
+      if (signup) {
+        const { data, error } = await supabase.auth.signUp({
+          email: f.email,
+          password: f.pass,
+          options: { data: { nom_complet: f.nom } },
+        });
+        if (error) throw error;
+        if (data.session) {
+          onLogin();
+        } else {
+          setConfirmSent(true);
+          setBusy(false);
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: f.email,
+          password: f.pass,
+        });
+        if (error) throw error;
+        onLogin();
+      }
+    } catch (e: unknown) {
+      setBusy(false);
+      setErr(mapError((e as { message?: string }).message ?? ''));
+    }
+  }
+
+  if (confirmSent) {
+    return (
+      <div className="screen pagefade" style={{ ...accentStyle('slate'), paddingTop: 8 }}>
+        <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+          <Reveal>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--bg-soft)', display: 'grid', placeItems: 'center', margin: '0 auto 20px', color: 'var(--ink-2)' }}>
+              <Icon n="mail" size={28} />
+            </div>
+            <h1 className="h1" style={{ fontSize: 24, marginBottom: 10 }}>Vérifiez votre email</h1>
+            <p className="lead" style={{ margin: '0 auto 24px', maxWidth: 300 }}>
+              Un lien de confirmation a été envoyé à <strong>{f.email}</strong>. Cliquez dessus pour activer votre compte.
+            </p>
+            <button className="btn btn-primary btn-block" onClick={() => { setConfirmSent(false); setMode('login'); }}>
+              Revenir à la connexion
+            </button>
+          </Reveal>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="screen pagefade" style={{ ...accentStyle('slate'), paddingTop: 8 }}>
       <div style={{ padding: '30px 24px 0', textAlign: 'center' }}>
@@ -42,8 +107,13 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
           </label>
           <label style={{ display: 'block', marginBottom: 18 }}>
             <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 6 }}>Mot de passe</span>
-            <input type="password" value={f.pass} onChange={e => setF({ ...f, pass: e.target.value })} placeholder="••••••••" style={INP_STYLE} />
+            <input type="password" value={f.pass} onChange={e => setF({ ...f, pass: e.target.value })} placeholder="••••••••" style={INP_STYLE} onKeyDown={e => e.key === 'Enter' && go()} />
           </label>
+          {err && (
+            <div style={{ background: 'color-mix(in srgb,#ef4444 12%,var(--surface))', border: '1px solid color-mix(in srgb,#ef4444 30%,transparent)', borderRadius: 12, padding: '11px 14px', marginBottom: 14, display: 'flex', gap: 9, alignItems: 'center', fontSize: 13.5, color: '#dc2626' }}>
+              <Icon n="info" size={16} style={{ flex: '0 0 auto' }} />{err}
+            </div>
+          )}
           <button className="btn btn-primary btn-block" style={{ height: 50, opacity: ok ? 1 : .55 }} disabled={!ok || busy} onClick={go}>
             {busy ? <><Spinner />{signup ? 'Création…' : 'Connexion…'}</> : (signup ? 'Créer mon compte' : 'Se connecter')}
           </button>
@@ -64,7 +134,7 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
         )}
         <div style={{ textAlign: 'center', marginTop: 22, fontSize: 13.5 }} className="muted">
           {signup ? 'Déjà un compte ? ' : 'Pas encore de compte ? '}
-          <button onClick={() => setMode(signup ? 'login' : 'signup')} style={{ fontWeight: 700, color: 'var(--brand-slate)' }}>
+          <button onClick={() => { setMode(signup ? 'login' : 'signup'); setErr(''); }} style={{ fontWeight: 700, color: 'var(--brand-slate)' }}>
             {signup ? 'Se connecter' : 'Créer un compte'}
           </button>
         </div>
@@ -73,7 +143,7 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
   );
 }
 
-/* ---------- Submit sheet ---------- */
+/* ---------- Submit sheet (dead code kept for backward compat) ---------- */
 export function SubmitSheet({ config, onClose }: {
   config: { mod: string; title: string };
   onClose: () => void;
@@ -125,15 +195,18 @@ export function SubmitSheet({ config, onClose }: {
 }
 
 /* ---------- Page Compte ---------- */
-export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, setNotif, onLogout }: {
+export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, setNotif, onLogout, etudiantIpb = false, displayName = '', initials = '' }: {
   role: string; onLogin: () => void;
   favs: FavItem[]; onOpen: (t: string, i: unknown) => void;
   onNav: (p: string, params?: string) => void;
   notif: Record<string, boolean>; setNotif: (n: Record<string, boolean>) => void;
   onLogout: () => void;
+  etudiantIpb?: boolean;
+  displayName?: string;
+  initials?: string;
 }) {
   if (role === 'visiteur') return <AuthScreen onLogin={onLogin} />;
-  const etu = role === 'etudiant';
+  const etu = etudiantIpb;
   const submitted = [
     { ...DB.TEMOIGNAGES[0], statut: 'publie' },
     { titre: 'Délivré de la peur', cat: 'Libération', date: 'il y a 3 jours', statut: 'attente' },
@@ -151,10 +224,10 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
             <span style={{ position: 'absolute', right: -30, top: -30, width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle,rgba(226,169,63,.35),transparent 70%)' }} />
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 15 }}>
               <span style={{ width: 62, height: 62, borderRadius: '50%', background: 'rgba(255,255,255,.16)', border: '2px solid rgba(255,255,255,.35)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 22 }}>
-                {etu ? 'AB' : 'GM'}
+                {initials}
               </span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 20, letterSpacing: '-.02em' }}>{etu ? 'Abel Bcongo' : 'Grâce Mbarga'}</div>
+                <div style={{ fontWeight: 800, fontSize: 20, letterSpacing: '-.02em' }}>{displayName}</div>
                 <div style={{ display: 'flex', gap: 7, marginTop: 7 }}>
                   <span className="tagpill" style={{ background: 'rgba(255,255,255,.16)', color: '#fff' }}><Icon n="check" size={11} sw={2.4} />Membre</span>
                   {etu && <span className="tagpill" style={{ background: 'rgba(124,91,201,.9)', color: '#fff' }}><Icon n="cap" size={11} sw={2} />Étudiant IPB</span>}

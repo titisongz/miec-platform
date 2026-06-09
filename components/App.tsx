@@ -3,6 +3,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import Icon from '@/components/icons';
 import { StatusBar, AppBar, FrictionModal, Sheet, Toggle, Spinner } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
+import { supabase } from '@/lib/supabase';
+import { addFavori, removeFavori } from '@/lib/queries';
 import PageAccueil from '@/components/pages/accueil';
 import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/components/pages/modules1';
 import { PageRessources, PageLibrairie, PageEvangelisation } from '@/components/pages/modules2';
@@ -12,7 +14,7 @@ import PageCompte from '@/components/pages/compte';
 import {
   DEnseignement, DTemoignage, DAnnonce, DSortie, DLivre, DPriere, DDoc, DRessource,
 } from '@/components/details';
-import type { AccentKey, Role, StackEntry, FavItem, FrictionConfig } from '@/lib/types';
+import type { AccentKey, Role, StackEntry, FavItem, FrictionConfig, UserProfile } from '@/lib/types';
 
 /* ---------- constants ---------- */
 const TYPEMAP: Record<string, { accent: AccentKey; icon: string; label: string; tf: string }> = {
@@ -49,12 +51,45 @@ function Toast({ msg, accent }: { msg: string; accent: AccentKey }) {
 }
 
 /* ---------- SubmitSheet ---------- */
-function SubmitSheet({ config, onClose }: { config: FrictionConfig; onClose: () => void }) {
+function SubmitSheet({ config, onClose, userId }: {
+  config: FrictionConfig; onClose: () => void; userId?: string | null;
+}) {
   const pri = config.mod === 'priere';
   const [step, setStep] = useState(0);
   const [v, setV] = useState({ titre: '', texte: '', cat: pri ? 'Santé' : 'Guérison', anon: false });
   const ok = v.titre && v.texte;
-  function go() { setStep(1); setTimeout(() => setStep(2), 1200); }
+
+  async function go() {
+    if (!ok) return;
+    setStep(1);
+    try {
+      if (userId) {
+        if (pri) {
+          await supabase.from('prieres').insert({
+            profile_id: userId,
+            sujet: v.titre,
+            details: v.texte,
+            categorie: v.cat,
+            anonyme: v.anon,
+            urgent: false,
+          });
+        } else {
+          await supabase.from('temoignages').insert({
+            profile_id: userId,
+            titre: v.titre,
+            contenu: v.texte,
+            categorie: v.cat,
+            anonyme: v.anon,
+            statut: 'en_attente',
+          });
+        }
+      }
+      setStep(2);
+    } catch {
+      setStep(0);
+    }
+  }
+
   return (
     <Sheet onClose={onClose}>
       {step === 2 ? (
@@ -66,7 +101,7 @@ function SubmitSheet({ config, onClose }: { config: FrictionConfig; onClose: () 
             {pri ? 'Sujet déposé' : 'Témoignage envoyé'}
           </div>
           <p className="lead" style={{ margin: '0 0 20px' }}>
-            {pri ? 'La communauté pourra désormais prier avec vous.' : 'Merci ! Votre témoignage sera relu puis publié pour encourager la communauté.'}
+            {pri ? 'La communauté pourra désormais prier avec vous.' : 'Merci ! Votre témoignage sera relu puis publié pour encourager la communauté.'}
           </p>
           <button className="btn btn-primary btn-block" onClick={onClose}>Fermer</button>
         </div>
@@ -97,7 +132,7 @@ function SubmitSheet({ config, onClose }: { config: FrictionConfig; onClose: () 
 
 /* ---------- App ---------- */
 export default function App() {
-  const [role, setRole] = useState<Role>('visiteur');
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stack, setStack] = useState<StackEntry[]>([{ page: 'accueil' }]);
   const view = stack[stack.length - 1];
   const [favs, setFavs] = useState<FavItem[]>([]);
@@ -109,7 +144,44 @@ export default function App() {
   const [ipbTab, setIpbTab] = useState('vitrine');
   const appRef = useRef<HTMLDivElement>(null);
 
-  /* phone scale */
+  /* derived auth state */
+  const role: Role = profile?.role ?? 'visiteur';
+  const etudiantIpb = profile?.etudiant_ipb ?? false;
+  const initials = profile
+    ? profile.nom_complet.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
+    : '';
+  const displayName = profile?.nom_complet.split(' ')[0] ?? '';
+
+  /* ── Supabase auth ────────────────────────────────────────────────── */
+  async function fetchProfile(userId: string) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, nom_complet, role, etudiant_ipb')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data) setProfile(data as UserProfile);
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) fetchProfile(session.user.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+        setFavs([]);
+        setPrayed([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── UI effects ───────────────────────────────────────────────────── */
   useEffect(() => {
     function fit() {
       const vw = window.innerWidth;
@@ -122,16 +194,15 @@ export default function App() {
     return () => window.removeEventListener('resize', fit);
   }, []);
 
-  /* scroll to top on navigation */
   useEffect(() => { if (appRef.current) appRef.current.scrollTop = 0; }, [stack.length, view.page, (view as { type?: string }).type]);
 
-  /* toast auto-dismiss */
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 2200);
     return () => clearTimeout(t);
   }, [toast]);
 
+  /* ── Navigation ───────────────────────────────────────────────────── */
   function nav(page: string, params?: string) {
     if (page === 'ipb' && params) setIpbTab(params);
     setStack(s => {
@@ -144,6 +215,7 @@ export default function App() {
   function back() { setStack(s => s.length > 1 ? s.slice(0, -1) : s); }
   function tab(k: string) { setStack([{ page: k } as unknown as StackEntry]); }
 
+  /* ── Favourites ───────────────────────────────────────────────────── */
   const isFav = (type: string, item: Record<string, unknown>) =>
     favs.some(f => f.type === type && f.id === (item.id ?? item.titre));
 
@@ -151,13 +223,19 @@ export default function App() {
     const m = TYPEMAP[type];
     const id = (item.id ?? item.titre) as string;
     const entry: FavItem = { type: type as import('@/lib/types').DetailType, id, item, title: item[m.tf] as string, label: m.label, accent: m.accent, icon: m.icon };
+    const alreadyFav = favs.some(x => x.type === type && x.id === id);
     setFavs(f => {
-      if (f.some(x => x.type === type && x.id === id)) return f.filter(x => !(x.type === type && x.id === id));
+      if (alreadyFav) return f.filter(x => !(x.type === type && x.id === id));
       setToast({ msg: 'Ajouté aux favoris', accent: m.accent });
       return [...f, entry];
     });
+    if (profile?.id) {
+      if (alreadyFav) removeFavori(profile.id, type, id);
+      else addFavori(profile.id, type, id);
+    }
   }
 
+  /* ── Prayers ──────────────────────────────────────────────────────── */
   function pray(id: string) {
     setPrayed(p => {
       if (p.includes(id)) return p.filter(x => x !== id);
@@ -166,6 +244,7 @@ export default function App() {
     });
   }
 
+  /* ── Auth flow ────────────────────────────────────────────────────── */
   function onAuth(x: FrictionConfig | string) {
     if (x && typeof x === 'object') setFriction(x as FrictionConfig);
     else tab('compte');
@@ -180,7 +259,12 @@ export default function App() {
     if (ipb) { setIpbTab('vitrine'); nav('ipb', 'vitrine'); }
     else tab('compte');
   }
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    tab('accueil');
+  }
 
+  /* ── Render ───────────────────────────────────────────────────────── */
   const tabKey = ['accueil', 'recherche', 'priere', 'compte'].includes(view.page) ? view.page : '';
   const isDetail = view.page === 'detail';
   const detailView = view as { page: string; type?: string; item?: unknown };
@@ -204,7 +288,7 @@ export default function App() {
     }
     switch (view.page) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      case 'accueil':       return <PageAccueil role={role} onNav={nav} onOpen={openDetail} onAuth={onAuth as any} />;
+      case 'accueil':       return <PageAccueil role={role} displayName={displayName} onNav={nav} onOpen={openDetail} onAuth={onAuth as any} />;
       case 'enseignements': return <PageEnseignements onOpen={openDetail} />;
       case 'temoignages':   return <PageTemoignages role={role} onOpen={openDetail} onSubmit={onSubmit} />;
       case 'annonces':      return <PageAnnonces onOpen={openDetail} />;
@@ -213,12 +297,26 @@ export default function App() {
       case 'librairie':     return <PageLibrairie onOpen={openDetail} />;
       case 'evangelisation':return <PageEvangelisation onOpen={openDetail} />;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      case 'ipb':           return <PageIPB role={role} onAuth={onAuth as any} onOpen={openDetail} ipbTab={ipbTab} setIpbTab={setIpbTab} />;
+      case 'ipb':           return <PageIPB etudiantIpb={etudiantIpb} onAuth={onAuth as any} onOpen={openDetail} ipbTab={ipbTab} setIpbTab={setIpbTab} />;
       case 'recherche':     return <PageRecherche onOpen={openDetail} onNav={nav} />;
+      case 'compte':        return (
+        <PageCompte
+          role={role}
+          onLogin={() => tab('accueil')}
+          favs={favs}
+          onOpen={openDetail}
+          onNav={nav}
+          notif={notif}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setNotif={setNotif as any}
+          onLogout={handleLogout}
+          etudiantIpb={etudiantIpb}
+          displayName={profile?.nom_complet ?? ''}
+          initials={initials}
+        />
+      );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      case 'compte':        return <PageCompte role={role} onLogin={() => setRole('membre')} favs={favs} onOpen={openDetail} onNav={nav} notif={notif} setNotif={setNotif as any} onLogout={() => { setRole('visiteur'); tab('accueil'); }} />;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      default:              return <PageAccueil role={role} onNav={nav} onOpen={openDetail} onAuth={onAuth as any} />;
+      default:              return <PageAccueil role={role} displayName={displayName} onNav={nav} onOpen={openDetail} onAuth={onAuth as any} />;
     }
   }
 
@@ -231,6 +329,7 @@ export default function App() {
           {!isDetail && (
             <AppBar
               role={role}
+              initials={initials}
               onSearch={() => tab('recherche')}
               onProfile={() => tab('compte')}
               onBell={() =>
@@ -254,17 +353,8 @@ export default function App() {
           )}
           {toast && <Toast msg={toast.msg} accent={toast.accent} />}
           {friction && <FrictionModal config={friction} onCreate={frictionCreate} onContinue={() => setFriction(null)} onClose={() => setFriction(null)} />}
-          {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} />}
+          {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} userId={profile?.id} />}
         </div>
-      </div>
-
-      {/* role switcher (demo) */}
-      <div className="rolepill">
-        {(['visiteur', 'membre', 'etudiant'] as Role[]).map((r, i) => (
-          <button key={r} className={role === r ? 'on' : ''} onClick={() => setRole(r)}>
-            {['Visiteur', 'Membre', 'Étudiant IPB'][i]}
-          </button>
-        ))}
       </div>
     </div>
   );

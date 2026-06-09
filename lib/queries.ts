@@ -412,6 +412,25 @@ export async function getFavoris(profile_id: string): Promise<FavItem[]> {
   }
 }
 
+// ── Favoris — écriture ───────────────────────────────────────────────────────
+
+export async function addFavori(userId: string, type: string, itemId: string): Promise<void> {
+  try {
+    await supabase
+      .from('favoris')
+      .upsert({ profile_id: userId, contenu_type: type, contenu_id: itemId });
+  } catch { /* silent */ }
+}
+
+export async function removeFavori(userId: string, type: string, itemId: string): Promise<void> {
+  try {
+    await supabase
+      .from('favoris')
+      .delete()
+      .match({ profile_id: userId, contenu_type: type, contenu_id: itemId });
+  } catch { /* silent */ }
+}
+
 // ── Activité récente — page d'accueil ─────────────────────────────────────────
 
 export async function getActivityRecente(): Promise<typeof DB.ACTIVITY> {

@@ -59,8 +59,8 @@ export function StatusBar() {
 }
 
 /* ---------- app bar ---------- */
-export function AppBar({ role, onSearch, onBell, onProfile }: {
-  role: string; onSearch: () => void; onBell: () => void; onProfile: () => void;
+export function AppBar({ role, initials = '', onSearch, onBell, onProfile }: {
+  role: string; initials?: string; onSearch: () => void; onBell: () => void; onProfile: () => void;
 }) {
   const member = role !== 'visiteur';
   return (
@@ -79,7 +79,7 @@ export function AppBar({ role, onSearch, onBell, onProfile }: {
           <Icon n="bell" size={21} />{member && <span className="dot" />}
         </button>
         {member
-          ? <button onClick={onProfile} className="avatar">{role === 'etudiant' ? 'AB' : 'GM'}</button>
+          ? <button onClick={onProfile} className="avatar">{initials}</button>
           : <button className="btn btn-soft btn-sm" style={accentStyle('slate')} onClick={onProfile}>Connexion</button>}
       </div>
     </header>

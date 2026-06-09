@@ -207,8 +207,8 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
 }
 
 /* ---------- Volet cours ---------- */
-function VoletCours({ role, onAuth, onOpen }: {
-  role: string; onAuth: (cfg: FrictionConfig | string) => void; onOpen: (t: string, i: unknown) => void;
+function VoletCours({ etudiantIpb, onAuth, onOpen }: {
+  etudiantIpb: boolean; onAuth: (cfg: FrictionConfig | string) => void; onOpen: (t: string, i: unknown) => void;
 }) {
   const [cours, setCours] = useState<IPBCours[]>(DB.IPB_COURS);
   const [loading, setLoading] = useState(true);
@@ -218,7 +218,7 @@ function VoletCours({ role, onAuth, onOpen }: {
     getIPBCours().then(data => { setCours(data); setLoading(false); });
   }, []);
 
-  if (role !== 'etudiant') {
+  if (!etudiantIpb) {
     return (
       <div className="slidein section" style={{ paddingTop: 20 }}>
         <Reveal>
@@ -294,8 +294,8 @@ function VoletCours({ role, onAuth, onOpen }: {
 }
 
 /* ---------- Page IPB ---------- */
-export default function PageIPB({ role, onAuth, onOpen, ipbTab, setIpbTab }: {
-  role: string;
+export default function PageIPB({ etudiantIpb = false, onAuth, onOpen, ipbTab, setIpbTab }: {
+  etudiantIpb?: boolean;
   onAuth: (cfg: FrictionConfig | string) => void;
   onOpen: (t: string, i: unknown) => void;
   ipbTab: string;
@@ -310,7 +310,7 @@ export default function PageIPB({ role, onAuth, onOpen, ipbTab, setIpbTab }: {
       />
       {ipbTab === 'vitrine'
         ? <VoletVitrine onAuth={onAuth} />
-        : <VoletCours role={role} onAuth={onAuth} onOpen={onOpen} />}
+        : <VoletCours etudiantIpb={etudiantIpb} onAuth={onAuth} onOpen={onOpen} />}
     </div>
   );
 }

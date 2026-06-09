@@ -1,7 +1,14 @@
 import type React from 'react';
 
 export type AccentKey = 'ens' | 'eva' | 'pri' | 'tem' | 'ann' | 'ipb' | 'res' | 'slate';
-export type Role = 'visiteur' | 'membre' | 'etudiant';
+export type Role = 'visiteur' | 'membre' | 'responsable' | 'super_admin';
+
+export interface UserProfile {
+  id: string;
+  nom_complet: string;
+  role: 'membre' | 'responsable' | 'super_admin';
+  etudiant_ipb: boolean;
+}
 export type PageKey =
   | 'accueil' | 'recherche' | 'priere' | 'compte'
   | 'enseignements' | 'temoignages' | 'annonces' | 'evangelisation'
