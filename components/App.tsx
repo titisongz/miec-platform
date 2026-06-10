@@ -172,6 +172,19 @@ export default function App() {
   }
 
   useEffect(() => {
+    // Confirmation email (PKCE) : si la redirection arrive sur '/' (ou ailleurs)
+    // avec ?code=… au lieu de passer par /auth/callback, on échange le code
+    // contre une session côté client (le code verifier est dans ce navigateur).
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) console.error('[auth] exchangeCodeForSession (client):', error.message);
+        url.searchParams.delete('code');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      });
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) fetchProfile(session.user.id);
     });
