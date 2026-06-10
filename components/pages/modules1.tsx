@@ -1,10 +1,11 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, Tag, Ph, EmptySearch, hl } from '@/components/ui';
+import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, Tag, Ph, EmptySearch, Spinner, hl } from '@/components/ui';
 import { accentStyle } from '@/lib/accent';
 import type { Enseignement, Serie, Temoignage, Annonce, Priere, FrictionConfig } from '@/lib/types';
-import { getEnseignements, getSeries, getTemoignages, getAnnonces, getPrieres } from '@/lib/queries';
+import { getEnseignements, getSeries, getTemoignages, getAnnonces, getPrieres, searchEnseignements, searchTemoignages, searchAnnonces } from '@/lib/queries';
+import { useSupabaseSearch } from '@/lib/use-search';
 
 /* ---------- ENSEIGNEMENTS ---------- */
 function EnsRow({ e, q, onOpen, delay }: { e: Enseignement; q: string; onOpen: (t: string, i: unknown) => void; delay: number }) {
@@ -43,11 +44,9 @@ export function PageEnseignements({ onOpen }: { onOpen: (t: string, i: unknown) 
     });
   }, []);
 
+  const { items: found, searching } = useSupabaseSearch(q, all, searchEnseignements);
   const themes = ['Tous', ...Array.from(new Set(all.map(e => e.theme).filter(Boolean)))];
-  const items = all.filter(e =>
-    (theme === 'Tous' || e.theme === theme) &&
-    (e.titre + e.serie + e.auteur).toLowerCase().includes(q.toLowerCase())
-  );
+  const items = found.filter(e => theme === 'Tous' || e.theme === theme);
 
   return (
     <div className="screen pagefade" style={accentStyle('ens')}>
@@ -75,6 +74,7 @@ export function PageEnseignements({ onOpen }: { onOpen: (t: string, i: unknown) 
           )}
           <div className="section-h" style={{ marginBottom: 6 }}>
             <h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'Tous les enseignements'}</h2>
+            {searching && <Spinner />}
           </div>
           {items.length
             ? <div className="list">{items.map((e, i) => <EnsRow key={e.id} e={e} q={q} onOpen={onOpen} delay={i * 45} />)}</div>
@@ -98,11 +98,9 @@ export function PageTemoignages({ role, onOpen, onSubmit }: {
     getTemoignages().then(data => { setAll(data); setLoading(false); });
   }, []);
 
+  const { items: found, searching } = useSupabaseSearch(q, all, searchTemoignages);
   const cats = ['Tous', ...Array.from(new Set(all.map(t => t.cat).filter(Boolean)))];
-  const items = all.filter(t =>
-    (cat === 'Tous' || t.cat === cat) &&
-    (t.titre + t.auteur + t.excerpt).toLowerCase().includes(q.toLowerCase())
-  );
+  const items = found.filter(t => cat === 'Tous' || t.cat === cat);
 
   return (
     <div className="screen pagefade" style={accentStyle('tem')}>
@@ -112,7 +110,7 @@ export function PageTemoignages({ role, onOpen, onSubmit }: {
       <ChipRow items={cats} active={cat} onPick={setCat} />
       <div className="section-h" style={{ marginBottom: 6 }}>
         <h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'Témoignages'}</h2>
-        <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>{items.length} publié{items.length > 1 ? 's' : ''}</span>
+        {searching ? <Spinner /> : <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>{items.length} publié{items.length > 1 ? 's' : ''}</span>}
       </div>
       {loading ? <BootList /> : items.length ? (
         <div className="list">
@@ -152,11 +150,9 @@ export function PageAnnonces({ onOpen }: { onOpen: (t: string, i: unknown) => vo
     getAnnonces().then(data => { setAll(data); setLoading(false); });
   }, []);
 
+  const { items: found, searching } = useSupabaseSearch(q, all, searchAnnonces);
   const cats = ['Toutes', ...Array.from(new Set(all.map(a => a.cat).filter(Boolean)))];
-  const items = all.filter(a =>
-    (cat === 'Toutes' || a.cat === cat) &&
-    (a.titre + a.excerpt + a.cat).toLowerCase().includes(q.toLowerCase())
-  );
+  const items = found.filter(a => cat === 'Toutes' || a.cat === cat);
 
   return (
     <div className="screen pagefade" style={accentStyle('ann')}>
@@ -164,7 +160,7 @@ export function PageAnnonces({ onOpen }: { onOpen: (t: string, i: unknown) => vo
       <ModuleHero mkey="annonces" />
       <div style={{ padding: '12px 0 4px' }}><SearchBar placeholder="Rechercher une annonce…" value={q} onChange={setQ} /></div>
       <ChipRow items={cats} active={cat} onPick={setCat} />
-      <div className="section-h" style={{ marginBottom: 6 }}><h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'À la une'}</h2></div>
+      <div className="section-h" style={{ marginBottom: 6 }}><h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'À la une'}</h2>{searching && <Spinner />}</div>
       {loading ? <BootList /> : items.length ? (
         <div className="list">
           {items.map((a, i) => (

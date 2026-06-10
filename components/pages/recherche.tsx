@@ -1,20 +1,22 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, SearchBar, EmptySearch, hl } from '@/components/ui';
-import { accentStyle, ACCENT } from '@/lib/accent';
+import { Reveal, SearchBar, EmptySearch, Spinner, hl } from '@/components/ui';
+import { accentStyle } from '@/lib/accent';
 import { Tile } from './accueil';
-import type { AccentKey, DetailType } from '@/lib/types';
+import type { AccentKey } from '@/lib/types';
 import DB from '@/lib/data';
+import { globalSearch, type GlobalSearchResult, type SearchType, type SearchHit } from '@/lib/queries';
 
-const TYPEMAP: Record<string, { accent: AccentKey; icon: string; label: string }> = {
-  enseignement: { accent: 'ens', icon: 'book',      label: 'Enseignement' },
-  temoignage:   { accent: 'tem', icon: 'quote',     label: 'Témoignage' },
-  annonce:      { accent: 'ann', icon: 'mega',      label: 'Annonce' },
-  sortie:       { accent: 'eva', icon: 'compass',   label: 'Évangélisation' },
-  livre:        { accent: 'res', icon: 'books',     label: 'Livre' },
-  priere:       { accent: 'pri', icon: 'flame',     label: 'Prière' },
-  ressource:    { accent: 'res', icon: 'folder',    label: 'Ressource' },
+const TYPEMAP: Record<SearchType, { accent: AccentKey; icon: string }> = {
+  enseignement: { accent: 'ens', icon: 'book' },
+  temoignage:   { accent: 'tem', icon: 'quote' },
+  annonce:      { accent: 'ann', icon: 'mega' },
+  priere:       { accent: 'pri', icon: 'flame' },
+  ressource:    { accent: 'res', icon: 'folder' },
+  livre:        { accent: 'res', icon: 'books' },
+  sortie:       { accent: 'eva', icon: 'compass' },
+  ipb:          { accent: 'ipb', icon: 'cap' },
 };
 
 export default function PageRecherche({ onOpen, onNav }: {
@@ -22,17 +24,36 @@ export default function PageRecherche({ onOpen, onNav }: {
   onNav: (p: string) => void;
 }) {
   const [q, setQ] = useState('');
-  const ql = q.trim().toLowerCase();
-  const all = [
-    ...DB.ENSEIGNEMENTS.map(x => ({ type: 'enseignement', item: x, t: x.titre, s: x.serie + ' ' + x.auteur })),
-    ...DB.TEMOIGNAGES.map(x  => ({ type: 'temoignage',   item: x, t: x.titre, s: x.auteur + ' ' + x.cat })),
-    ...DB.ANNONCES.map(x     => ({ type: 'annonce',      item: x, t: x.titre, s: x.cat })),
-    ...DB.PRIERES.map(x      => ({ type: 'priere',       item: x, t: x.sujet, s: x.auteur + ' ' + x.cat })),
-    ...DB.RESSOURCES.map(x   => ({ type: 'ressource',    item: x, t: x.titre, s: x.cat + ' ' + x.fmt })),
-    ...DB.LIVRES.map(x       => ({ type: 'livre',        item: x, t: x.titre, s: x.auteur })),
-    ...DB.SORTIES.map(x      => ({ type: 'sortie',       item: x, t: x.titre, s: x.theme })),
-  ];
-  const res = ql ? all.filter(r => (r.t + ' ' + r.s).toLowerCase().includes(ql)) : [];
+  const [res, setRes] = useState<GlobalSearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
+  const seq = useRef(0);
+
+  // Recherche Supabase débouncée (300 ms)
+  useEffect(() => {
+    const term = q.trim();
+    if (!term) {
+      setRes(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const id = ++seq.current;
+    const t = setTimeout(async () => {
+      const r = await globalSearch(term);
+      if (id === seq.current) {
+        setRes(r);
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const ql = q.trim();
+
+  function openHit(hit: SearchHit) {
+    if (hit.type === 'ipb') onNav('ipb');
+    else onOpen(hit.type, hit.item);
+  }
 
   return (
     <div className="screen pagefade" style={accentStyle('slate')}>
@@ -42,6 +63,7 @@ export default function PageRecherche({ onOpen, onNav }: {
       <div style={{ padding: '0 0 6px' }}>
         <SearchBar placeholder="Enseignements, témoignages, livres…" value={q} onChange={setQ} autoFocus />
       </div>
+
       {!ql ? (
         <div className="section" style={{ paddingTop: 14 }}>
           <div className="eyebrow" style={{ marginBottom: 12 }}>Explorer par module</div>
@@ -49,30 +71,46 @@ export default function PageRecherche({ onOpen, onNav }: {
             {DB.HUB_ORDER.map((k, i) => <Tile key={k} mkey={k} onNav={onNav} delay={i * 35} />)}
           </div>
         </div>
-      ) : res.length ? (
+      ) : searching ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '52px 24px', color: 'var(--ink-3)' }}>
+          <Spinner />
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>Recherche en cours…</div>
+        </div>
+      ) : res && res.total ? (
         <>
           <div className="section-h" style={{ marginBottom: 8 }}>
-            <h2 style={{ fontSize: 16 }}>{res.length} résultat{res.length > 1 ? 's' : ''}</h2>
+            <h2 style={{ fontSize: 16 }}>{res.total} résultat{res.total > 1 ? 's' : ''}</h2>
           </div>
-          <div className="list" style={{ paddingTop: 0 }}>
-            {res.map((r, i) => {
-              const m = TYPEMAP[r.type];
-              return (
-                <Reveal key={i} delay={i * 30}>
-                  <button className="card tap row-card" style={{ ...accentStyle(m.accent), width: '100%', textAlign: 'left', padding: 12 }} onClick={() => onOpen(r.type, r.item)}>
-                    <span style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                      <Icon n={m.icon} size={18} />
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, marginBottom: 3 }}>{hl(r.t, q)}</div>
-                      <div className="t3" style={{ fontSize: 11.5, fontWeight: 600 }}>{m.label} · {r.s}</div>
-                    </div>
-                    <Icon n="cr" size={16} style={{ color: 'var(--ink-3)' }} />
-                  </button>
-                </Reveal>
-              );
-            })}
-          </div>
+          {res.groups.map(group => {
+            const m = TYPEMAP[group.type];
+            return (
+              <div key={group.type} className="section" style={{ paddingTop: 6 }}>
+                <div className="eyebrow" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ ...accentStyle(m.accent), width: 20, height: 20, borderRadius: 6, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center' }}>
+                    <Icon n={m.icon} size={12} />
+                  </span>
+                  {group.label}
+                  <span style={{ color: 'var(--ink-3)', fontWeight: 600 }}>· {group.hits.length}</span>
+                </div>
+                <div className="list" style={{ paddingTop: 0 }}>
+                  {group.hits.map((hit, i) => (
+                    <Reveal key={hit.id} delay={i * 25}>
+                      <button className="card tap row-card" style={{ ...accentStyle(m.accent), width: '100%', textAlign: 'left', padding: 12 }} onClick={() => openHit(hit)}>
+                        <span style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                          <Icon n={m.icon} size={18} />
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, marginBottom: 3 }}>{hl(hit.title, ql)}</div>
+                          {hit.subtitle && <div className="t3" style={{ fontSize: 11.5, fontWeight: 600 }}>{hit.subtitle}</div>}
+                        </div>
+                        <Icon n="cr" size={16} style={{ color: 'var(--ink-3)' }} />
+                      </button>
+                    </Reveal>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </>
       ) : <EmptySearch label={q} />}
     </div>

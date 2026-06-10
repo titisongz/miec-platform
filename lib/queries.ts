@@ -431,6 +431,355 @@ export async function removeFavori(userId: string, type: string, itemId: string)
   } catch { /* silent */ }
 }
 
+// ── Recherche Supabase ────────────────────────────────────────────────────────
+
+/** Nettoie le terme : retire les caractères qui cassent le filtre `.or()` de PostgREST. */
+function sanitizeTerm(q: string): string {
+  return q.trim().replace(/[,()%*]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Construit une clause `.or()` insensible à la casse sur plusieurs colonnes. */
+function ilikeOr(term: string, cols: string[]): string {
+  return cols.map(c => `${c}.ilike.%${term}%`).join(',');
+}
+
+export async function searchEnseignements(query: string): Promise<Enseignement[]> {
+  const term = sanitizeTerm(query);
+  if (!term) return [];
+  try {
+    const { data, error } = await supabase
+      .from('enseignements')
+      .select(`
+        id, titre, intervenant, date, youtube_id, type,
+        numero, total_serie, theme, texte,
+        serie:series(id, titre)
+      `)
+      .or(ilikeOr(term, ['titre', 'intervenant', 'theme']))
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (error || !data) return [];
+
+    return data.map(e => ({
+      id: e.id,
+      serie: (e.serie as { titre?: string } | null)?.titre ?? '',
+      titre: e.titre,
+      auteur: e.intervenant ?? '',
+      date: fmtDate(e.date),
+      duree: '',
+      type: e.type === 'video' ? 'video' : 'text',
+      yt: e.youtube_id ?? undefined,
+      theme: e.theme ?? '',
+      n: e.numero ?? 1,
+      total: e.total_serie ?? 1,
+      excerpt: e.texte ? e.texte.slice(0, 200) : '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function searchTemoignages(query: string): Promise<Temoignage[]> {
+  const term = sanitizeTerm(query);
+  if (!term) return [];
+  try {
+    const { data, error } = await supabase
+      .from('temoignages')
+      .select(`
+        id, titre, categorie, anonyme, statut, contenu, created_at,
+        auteur:profiles(nom_complet)
+      `)
+      .eq('statut', 'publie')
+      .or(ilikeOr(term, ['titre', 'contenu', 'categorie']))
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (error || !data) return [];
+
+    return data.map(t => ({
+      id: t.id,
+      titre: t.titre,
+      auteur: t.anonyme ? 'Anonyme' : ((t.auteur as { nom_complet?: string } | null)?.nom_complet ?? 'Anonyme'),
+      date: fmtDate(t.created_at),
+      cat: t.categorie ?? '',
+      statut: t.statut,
+      excerpt: t.contenu ? t.contenu.slice(0, 160) : '',
+      full: t.contenu ?? '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function searchAnnonces(query: string): Promise<Annonce[]> {
+  const term = sanitizeTerm(query);
+  if (!term) return [];
+  try {
+    const { data, error } = await supabase
+      .from('annonces')
+      .select('id, titre, categorie, date_evenement, urgent, contenu')
+      .or(ilikeOr(term, ['titre', 'contenu', 'categorie']))
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (error || !data) return [];
+
+    return data.map(a => ({
+      id: a.id,
+      titre: a.titre,
+      cat: a.categorie ?? '',
+      date: fmtDate(a.date_evenement),
+      urgent: a.urgent,
+      excerpt: a.contenu ? a.contenu.slice(0, 160) : '',
+      full: a.contenu ?? '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function searchRessources(query: string): Promise<Ressource[]> {
+  const term = sanitizeTerm(query);
+  if (!term) return [];
+  try {
+    const { data, error } = await supabase
+      .from('ressources')
+      .select('id, titre, type, taille, categorie, created_at')
+      .or(ilikeOr(term, ['titre', 'categorie']))
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (error || !data) return [];
+
+    return data.map(r => ({
+      id: r.id,
+      titre: r.titre,
+      type: r.type,
+      fmt: FMT_MAP[r.type] ?? r.type,
+      taille: r.taille ?? '',
+      cat: r.categorie ?? '',
+      date: fmtDate(r.created_at),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function searchLivres(query: string): Promise<Livre[]> {
+  const term = sanitizeTerm(query);
+  if (!term) return [];
+  try {
+    const { data, error } = await supabase
+      .from('livres')
+      .select('id, titre, auteur, annee, pages, categorie, description, extrait')
+      .or(ilikeOr(term, ['titre', 'auteur', 'description']))
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (error || !data) return [];
+
+    return data.map(l => ({
+      id: l.id,
+      titre: l.titre,
+      auteur: l.auteur ?? '',
+      annee: l.annee ?? 0,
+      pages: l.pages ?? 0,
+      cat: l.categorie ?? '',
+      desc: l.description ?? '',
+      extrait: l.extrait ?? '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function searchSorties(query: string): Promise<Sortie[]> {
+  const term = sanitizeTerm(query);
+  if (!term) return [];
+  try {
+    const { data, error } = await supabase
+      .from('sorties')
+      .select(`
+        id, titre, date, heure, statut, theme, programme,
+        rapports:rapports_sorties(taille_equipe, contacts, decisions)
+      `)
+      .or(ilikeOr(term, ['titre', 'theme', 'lieu']))
+      .order('date', { ascending: false })
+      .limit(30);
+
+    if (error || !data) return [];
+
+    return data.map(s => {
+      const rapport = (s.rapports as { taille_equipe?: number; contacts?: number; decisions?: number }[] | null)?.[0];
+      return {
+        id: s.id,
+        titre: s.titre,
+        date: fmtDate(s.date),
+        heure: s.heure ?? '',
+        statut: s.statut,
+        theme: s.theme ?? '',
+        equipe: rapport?.taille_equipe ?? 0,
+        contacts: rapport?.contacts ?? undefined,
+        decisions: rapport?.decisions ?? undefined,
+        full: s.programme ?? '',
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+// ── Recherche globale ─────────────────────────────────────────────────────────
+
+export type SearchType =
+  | 'enseignement' | 'temoignage' | 'annonce' | 'priere'
+  | 'ressource' | 'livre' | 'sortie' | 'ipb';
+
+export interface SearchHit {
+  type: SearchType;
+  id: string;
+  title: string;
+  subtitle: string;
+  item: unknown;
+}
+
+export interface SearchGroup {
+  type: SearchType;
+  label: string;
+  hits: SearchHit[];
+}
+
+export interface GlobalSearchResult {
+  total: number;
+  groups: SearchGroup[];
+}
+
+const SEARCH_LABELS: Record<SearchType, string> = {
+  enseignement: 'Enseignements',
+  temoignage: 'Témoignages',
+  annonce: 'Annonces',
+  priere: 'Prières',
+  ressource: 'Ressources',
+  livre: 'Librairie',
+  sortie: 'Évangélisation',
+  ipb: 'Institut Biblique',
+};
+
+async function searchPrieresHits(term: string): Promise<SearchHit[]> {
+  try {
+    const { data, error } = await supabase
+      .from('prieres')
+      .select(`
+        id, sujet, categorie, anonyme, urgent, compteur_prie, details, created_at,
+        auteur:profiles(nom_complet)
+      `)
+      .or(ilikeOr(term, ['sujet', 'details']))
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error || !data) return [];
+
+    return data.map(p => ({
+      type: 'priere' as const,
+      id: p.id,
+      title: p.sujet,
+      subtitle: p.categorie ?? '',
+      item: {
+        id: p.id,
+        sujet: p.sujet,
+        auteur: p.anonyme ? 'Anonyme' : ((p.auteur as { nom_complet?: string } | null)?.nom_complet ?? 'Anonyme'),
+        date: relativeDate(p.created_at),
+        cat: p.categorie ?? '',
+        prie: p.compteur_prie,
+        urgent: p.urgent,
+        full: p.details ?? '',
+      } as Priere,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function searchIPBHits(term: string): Promise<SearchHit[]> {
+  try {
+    const { data, error } = await supabase
+      .from('ipb_programme')
+      .select('id, code, titre, credits, niveau')
+      .or(ilikeOr(term, ['titre', 'code']))
+      .limit(5);
+
+    if (error || !data) return [];
+
+    return data.map(p => ({
+      type: 'ipb' as const,
+      id: (p.id as string) ?? p.code,
+      title: p.titre,
+      subtitle: [p.code, p.niveau].filter(Boolean).join(' · '),
+      item: { code: p.code, titre: p.titre, credits: p.credits ?? 0, niveau: p.niveau ?? '' } as IPBProgramme,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Recherche simultanée dans toutes les tables de la plateforme.
+ * Retourne les résultats groupés par type, max 5 par catégorie.
+ */
+export async function globalSearch(query: string): Promise<GlobalSearchResult> {
+  const term = sanitizeTerm(query);
+  if (!term) return { total: 0, groups: [] };
+
+  const [ens, tem, ann, pri, res, liv, sor, ipb] = await Promise.all([
+    searchEnseignements(term),
+    searchTemoignages(term),
+    searchAnnonces(term),
+    searchPrieresHits(term),
+    searchRessources(term),
+    searchLivres(term),
+    searchSorties(term),
+    searchIPBHits(term),
+  ]);
+
+  const groups: SearchGroup[] = [
+    {
+      type: 'enseignement' as const,
+      label: SEARCH_LABELS.enseignement,
+      hits: ens.slice(0, 5).map(e => ({ type: 'enseignement' as const, id: e.id, title: e.titre, subtitle: [e.serie, e.auteur].filter(Boolean).join(' · '), item: e })),
+    },
+    {
+      type: 'temoignage' as const,
+      label: SEARCH_LABELS.temoignage,
+      hits: tem.slice(0, 5).map(t => ({ type: 'temoignage' as const, id: t.id, title: t.titre, subtitle: [t.cat, t.auteur].filter(Boolean).join(' · '), item: t })),
+    },
+    {
+      type: 'annonce' as const,
+      label: SEARCH_LABELS.annonce,
+      hits: ann.slice(0, 5).map(a => ({ type: 'annonce' as const, id: a.id, title: a.titre, subtitle: a.cat, item: a })),
+    },
+    { type: 'priere' as const, label: SEARCH_LABELS.priere, hits: pri },
+    {
+      type: 'ressource' as const,
+      label: SEARCH_LABELS.ressource,
+      hits: res.slice(0, 5).map(r => ({ type: 'ressource' as const, id: r.id, title: r.titre, subtitle: [r.cat, r.fmt].filter(Boolean).join(' · '), item: r })),
+    },
+    {
+      type: 'livre' as const,
+      label: SEARCH_LABELS.livre,
+      hits: liv.slice(0, 5).map(b => ({ type: 'livre' as const, id: b.id, title: b.titre, subtitle: b.auteur, item: b })),
+    },
+    {
+      type: 'sortie' as const,
+      label: SEARCH_LABELS.sortie,
+      hits: sor.slice(0, 5).map(s => ({ type: 'sortie' as const, id: s.id, title: s.titre, subtitle: s.theme, item: s })),
+    },
+    { type: 'ipb' as const, label: SEARCH_LABELS.ipb, hits: ipb },
+  ].filter(g => g.hits.length > 0);
+
+  const total = groups.reduce((sum, g) => sum + g.hits.length, 0);
+  return { total, groups };
+}
+
 // ── Activité récente — page d'accueil ─────────────────────────────────────────
 
 export async function getActivityRecente(): Promise<typeof DB.ACTIVITY> {

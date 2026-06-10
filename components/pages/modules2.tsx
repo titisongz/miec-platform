@@ -1,10 +1,11 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, SkeletonCard, Tag, Ph, EmptySearch, hl } from '@/components/ui';
+import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, SkeletonCard, Tag, Ph, EmptySearch, Spinner, hl } from '@/components/ui';
 import { accentStyle, RES_ICON } from '@/lib/accent';
 import type { Ressource, Livre, Sortie } from '@/lib/types';
-import { getRessources, getLivres, getSorties } from '@/lib/queries';
+import { getRessources, getLivres, getSorties, searchRessources, searchLivres, searchSorties } from '@/lib/queries';
+import { useSupabaseSearch } from '@/lib/use-search';
 
 /* ---------- RESSOURCES ---------- */
 export function PageRessources({ onOpen }: { onOpen: (t: string, i: unknown) => void }) {
@@ -17,11 +18,9 @@ export function PageRessources({ onOpen }: { onOpen: (t: string, i: unknown) => 
     getRessources().then(data => { setAll(data); setLoading(false); });
   }, []);
 
+  const { items: found, searching } = useSupabaseSearch(q, all, searchRessources);
   const cats = ['Tous', ...Array.from(new Set(all.map(r => r.cat).filter(Boolean)))];
-  const items = all.filter(r =>
-    (cat === 'Tous' || r.cat === cat) &&
-    (r.titre + r.cat + r.fmt).toLowerCase().includes(q.toLowerCase())
-  );
+  const items = found.filter(r => cat === 'Tous' || r.cat === cat);
 
   return (
     <div className="screen pagefade" style={accentStyle('res')}>
@@ -31,7 +30,7 @@ export function PageRessources({ onOpen }: { onOpen: (t: string, i: unknown) => 
       <ChipRow items={cats} active={cat} onPick={setCat} />
       <div className="section-h" style={{ marginBottom: 6 }}>
         <h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'Bibliothèque'}</h2>
-        <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>{items.length} fichiers</span>
+        {searching ? <Spinner /> : <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>{items.length} fichiers</span>}
       </div>
       {loading ? <BootList /> : items.length ? (
         <div className="list">
@@ -68,7 +67,7 @@ export function PageLibrairie({ onOpen }: { onOpen: (t: string, i: unknown) => v
     getLivres().then(data => { setAll(data); setLoading(false); });
   }, []);
 
-  const items = all.filter(b => (b.titre + b.auteur + b.cat).toLowerCase().includes(q.toLowerCase()));
+  const { items, searching } = useSupabaseSearch(q, all, searchLivres);
 
   return (
     <div className="screen pagefade" style={accentStyle('res')}>
@@ -77,7 +76,7 @@ export function PageLibrairie({ onOpen }: { onOpen: (t: string, i: unknown) => v
       <div style={{ padding: '12px 0 8px' }}><SearchBar placeholder="Rechercher un livre, un auteur…" value={q} onChange={setQ} /></div>
       <div className="section-h" style={{ marginBottom: 6 }}>
         <h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'Vitrine'}</h2>
-        <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>Auteurs de la communauté</span>
+        {searching ? <Spinner /> : <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>Auteurs de la communauté</span>}
       </div>
       {loading ? <div className="list"><SkeletonCard /><SkeletonCard /></div> : items.length ? (
         <div className="list">
@@ -115,8 +114,9 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
     getSorties().then(data => { setAll(data); setLoading(false); });
   }, []);
 
-  const aVenir = all.filter(s => s.statut === 'a_venir' && (s.titre + s.theme).toLowerCase().includes(q.toLowerCase()));
-  const passees = all.filter(s => s.statut === 'passee' && (s.titre + s.theme).toLowerCase().includes(q.toLowerCase()));
+  const { items, searching } = useSupabaseSearch(q, all, searchSorties);
+  const aVenir = items.filter(s => s.statut === 'a_venir');
+  const passees = items.filter(s => s.statut === 'passee');
 
   return (
     <div className="screen pagefade" style={accentStyle('eva')}>
@@ -124,7 +124,7 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
       <ModuleHero mkey="evangelisation" />
       <div style={{ padding: '12px 0 8px' }}><SearchBar placeholder="Rechercher une sortie…" value={q} onChange={setQ} /></div>
 
-      <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>Calendrier des sorties</h2></div>
+      <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>Calendrier des sorties</h2>{searching && <Spinner />}</div>
       {loading ? <BootList n={2} /> : aVenir.length ? (
         <div className="list">
           {aVenir.map((s, i) => (
