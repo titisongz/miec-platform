@@ -254,6 +254,105 @@ export async function getAdminStats() {
   return { members, students, contenus, prieres, pendingTem };
 }
 
+// ── Super Admin — Profiles ────────────────────────────────────────────────────
+
+export type Profile = {
+  id: string; nom_complet: string; email: string;
+  role: string; etudiant_ipb: boolean; created_at: string;
+};
+
+export async function getAllProfiles(roleFilter?: string): Promise<Profile[]> {
+  let q = supabase
+    .from('profiles')
+    .select('id, nom_complet, email, role, etudiant_ipb, created_at')
+    .order('created_at', { ascending: false });
+  if (roleFilter) q = q.eq('role', roleFilter);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).map(p => ({
+    id: p.id,
+    nom_complet: p.nom_complet ?? '',
+    email: p.email ?? '',
+    role: p.role ?? 'membre',
+    etudiant_ipb: p.etudiant_ipb ?? false,
+    created_at: p.created_at ?? '',
+  }));
+}
+
+export async function updateProfileRole(id: string, role: string) {
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function setEtudiantIPB(id: string, val: boolean) {
+  const { error } = await supabase.from('profiles').update({ etudiant_ipb: val }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function getSuperAdminStats() {
+  const [memRes, respRes, saRes, etuRes, priRes, temRes] = await Promise.allSettled([
+    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'responsable'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'super_admin'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('etudiant_ipb', true),
+    supabase.from('prieres').select('id', { count: 'exact', head: true }),
+    supabase.from('temoignages').select('id', { count: 'exact', head: true }).eq('statut', 'en_attente'),
+  ]);
+  return {
+    members:  memRes.status  === 'fulfilled' ? (memRes.value.count  ?? 0) : 0,
+    resps:    respRes.status === 'fulfilled' ? (respRes.value.count ?? 0) : 0,
+    superadmins: saRes.status === 'fulfilled' ? (saRes.value.count ?? 0) : 0,
+    students: etuRes.status  === 'fulfilled' ? (etuRes.value.count  ?? 0) : 0,
+    prieres:  priRes.status  === 'fulfilled' ? (priRes.value.count  ?? 0) : 0,
+    pendingTem: temRes.status === 'fulfilled' ? (temRes.value.count ?? 0) : 0,
+  };
+}
+
+export async function getRecentSignups(days = 7): Promise<Profile[]> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, nom_complet, email, role, etudiant_ipb, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  return (data ?? []).map(p => ({
+    id: p.id, nom_complet: p.nom_complet ?? '', email: p.email ?? '',
+    role: p.role ?? 'membre', etudiant_ipb: p.etudiant_ipb ?? false, created_at: p.created_at ?? '',
+  }));
+}
+
+// ── Super Admin — Audit logs ──────────────────────────────────────────────────
+
+export type ActionLog = {
+  id: string; admin_id: string; admin_nom: string;
+  action: string; cible: string; details: string; created_at: string;
+};
+
+export async function logAction(action: string, cible: string, details?: string) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  const { data: profile } = await supabase
+    .from('profiles').select('nom_complet').eq('id', session.user.id).single();
+  await supabase.from('audit_logs').insert({
+    admin_id: session.user.id,
+    admin_nom: profile?.nom_complet ?? 'Super Admin',
+    action, cible, details: details ?? null,
+  });
+}
+
+export async function getActionLogs(limit = 50): Promise<ActionLog[]> {
+  const { data } = await supabase
+    .from('audit_logs')
+    .select('id, admin_id, admin_nom, action, cible, details, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data ?? []).map(l => ({
+    id: l.id, admin_id: l.admin_id, admin_nom: l.admin_nom ?? '',
+    action: l.action, cible: l.cible ?? '', details: l.details ?? '', created_at: l.created_at,
+  }));
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function relDate(iso: string): string {
