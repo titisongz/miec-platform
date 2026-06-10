@@ -38,7 +38,10 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
         const { data, error } = await supabase.auth.signUp({
           email: f.email,
           password: f.pass,
-          options: { data: { nom_complet: f.nom } },
+          options: {
+            data: { nom_complet: f.nom },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
         });
         if (error) throw error;
         if (data.session) {
