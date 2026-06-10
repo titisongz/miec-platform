@@ -9,16 +9,23 @@ import DB from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 
 /* ---------- Auth screen ---------- */
+// Bouton œil pour afficher/masquer le mot de passe, superposé à droite du champ.
+const EYE_BTN: React.CSSProperties = {
+  position: 'absolute', right: 4, top: 0, height: 48, width: 40,
+  display: 'grid', placeItems: 'center', color: 'var(--ink-2)', cursor: 'pointer',
+};
+
 export function AuthScreen({ mode: initial = 'login', onLogin }: {
   mode?: string; onLogin: () => void;
 }) {
   const [mode, setMode] = useState(initial);
   const signup = mode === 'signup';
-  const [f, setF] = useState({ nom: '', email: '', pass: '' });
+  const [f, setF] = useState({ nom: '', email: '', pass: '', pass2: '' });
+  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [confirmSent, setConfirmSent] = useState(false);
-  const ok = f.email && f.pass && (!signup || f.nom);
+  const ok = f.email && f.pass && (!signup || (f.nom && f.pass2));
 
   function mapError(msg: string): string {
     if (msg.includes('Invalid login credentials')) return 'Email ou mot de passe incorrect.';
@@ -31,6 +38,10 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
 
   async function go() {
     if (!ok) return;
+    if (signup && f.pass !== f.pass2) {
+      setErr('Les mots de passe ne correspondent pas.');
+      return;
+    }
     setBusy(true);
     setErr('');
     try {
@@ -108,10 +119,26 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
             <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 6 }}>Adresse email</span>
             <input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} placeholder="vous@exemple.com" style={INP_STYLE} />
           </label>
-          <label style={{ display: 'block', marginBottom: 18 }}>
+          <label style={{ display: 'block', marginBottom: signup ? 13 : 18 }}>
             <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 6 }}>Mot de passe</span>
-            <input type="password" value={f.pass} onChange={e => setF({ ...f, pass: e.target.value })} placeholder="••••••••" style={INP_STYLE} onKeyDown={e => e.key === 'Enter' && go()} />
+            <div style={{ position: 'relative' }}>
+              <input type={show ? 'text' : 'password'} value={f.pass} onChange={e => setF({ ...f, pass: e.target.value })} placeholder="••••••••" style={{ ...INP_STYLE, paddingRight: 46 }} onKeyDown={e => e.key === 'Enter' && go()} />
+              <button type="button" onClick={() => setShow(s => !s)} aria-label={show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} style={EYE_BTN}>
+                <Icon n={show ? 'eyeoff' : 'eye'} size={18} />
+              </button>
+            </div>
           </label>
+          {signup && (
+            <label style={{ display: 'block', marginBottom: 18 }}>
+              <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 6 }}>Confirmer le mot de passe</span>
+              <div style={{ position: 'relative' }}>
+                <input type={show ? 'text' : 'password'} value={f.pass2} onChange={e => setF({ ...f, pass2: e.target.value })} placeholder="••••••••" style={{ ...INP_STYLE, paddingRight: 46 }} onKeyDown={e => e.key === 'Enter' && go()} />
+                <button type="button" onClick={() => setShow(s => !s)} aria-label={show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} style={EYE_BTN}>
+                  <Icon n={show ? 'eyeoff' : 'eye'} size={18} />
+                </button>
+              </div>
+            </label>
+          )}
           {err && (
             <div style={{ background: 'color-mix(in srgb,#ef4444 12%,var(--surface))', border: '1px solid color-mix(in srgb,#ef4444 30%,transparent)', borderRadius: 12, padding: '11px 14px', marginBottom: 14, display: 'flex', gap: 9, alignItems: 'center', fontSize: 13.5, color: '#dc2626' }}>
               <Icon n="info" size={16} style={{ flex: '0 0 auto' }} />{err}
