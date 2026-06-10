@@ -262,14 +262,12 @@ export type Profile = {
 };
 
 export async function getAllProfiles(roleFilter?: string): Promise<Profile[]> {
-  let q = supabase
-    .from('profiles')
-    .select('id, nom_complet, email, role, etudiant_ipb, created_at')
-    .order('created_at', { ascending: false });
+  // email vit dans auth.users → fonction SQL profils_avec_email() (jointure security definer)
+  let q = supabase.rpc('profils_avec_email');
   if (roleFilter) q = q.eq('role', roleFilter);
-  const { data, error } = await q;
+  const { data, error } = await q.order('created_at', { ascending: false });
   if (error) throw error;
-  return (data ?? []).map(p => ({
+  return ((data as Profile[]) ?? []).map(p => ({
     id: p.id,
     nom_complet: p.nom_complet ?? '',
     email: p.email ?? '',
@@ -311,12 +309,11 @@ export async function getSuperAdminStats() {
 export async function getRecentSignups(days = 7): Promise<Profile[]> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const { data } = await supabase
-    .from('profiles')
-    .select('id, nom_complet, email, role, etudiant_ipb, created_at')
+    .rpc('profils_avec_email')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(10);
-  return (data ?? []).map(p => ({
+  return ((data as Profile[]) ?? []).map(p => ({
     id: p.id, nom_complet: p.nom_complet ?? '', email: p.email ?? '',
     role: p.role ?? 'membre', etudiant_ipb: p.etudiant_ipb ?? false, created_at: p.created_at ?? '',
   }));

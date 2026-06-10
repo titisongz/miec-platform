@@ -154,11 +154,9 @@ export default function App() {
 
   /* ── Supabase auth ────────────────────────────────────────────────── */
   async function fetchProfile(userId: string) {
-    // select('*') : robuste au nom réel de la colonne IPB en base
-    // (le schéma utilise `est_etudiant_ipb`, certains environnements `etudiant_ipb`).
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, nom_complet, role, etudiant_ipb')
       .eq('id', userId)
       .maybeSingle();
 
@@ -170,14 +168,7 @@ export default function App() {
       console.warn('[auth] aucune ligne profile pour', userId, '— le trigger handle_new_user a-t-il bien créé le profil ?');
       return;
     }
-
-    const row = data as Record<string, unknown>;
-    setProfile({
-      id: row.id as string,
-      nom_complet: (row.nom_complet as string) ?? '',
-      role: (row.role as UserProfile['role']) ?? 'membre',
-      etudiant_ipb: Boolean(row.etudiant_ipb ?? row.est_etudiant_ipb ?? false),
-    });
+    setProfile(data as UserProfile);
   }
 
   useEffect(() => {

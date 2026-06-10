@@ -47,7 +47,7 @@ create table public.profiles (
   nom_complet          text,
   telephone_whatsapp   text,
   role                 role_utilisateur not null default 'membre',
-  est_etudiant_ipb     boolean not null default false,
+  etudiant_ipb         boolean not null default false,
   notif_email          boolean not null default true,
   notif_whatsapp       boolean not null default false,
   created_at           timestamptz not null default now(),
@@ -627,3 +627,32 @@ create policy "favoris: insert proprio"
 create policy "favoris: delete proprio"
   on public.favoris for delete
   using (profile_id = auth.uid());
+
+
+-- ────────────────────────────────────────────────────────────
+-- 7. FONCTION — profils enrichis de l'email (back-office)
+-- ────────────────────────────────────────────────────────────
+-- L'email n'est pas dans public.profiles mais dans auth.users.
+-- Cette fonction `security definer` joint les deux et n'expose les
+-- données qu'aux responsables / super_admins (garde est_responsable()).
+create or replace function public.profils_avec_email()
+returns table (
+  id           uuid,
+  nom_complet  text,
+  email        text,
+  role         role_utilisateur,
+  etudiant_ipb boolean,
+  created_at   timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id, p.nom_complet, u.email::text, p.role, p.etudiant_ipb, p.created_at
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where est_responsable()
+$$;
+
+grant execute on function public.profils_avec_email() to authenticated;

@@ -156,15 +156,22 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabase.from('ipb_inscriptions')
-          .select('id, created_at, statut, profile:profiles(nom_complet, email)')
-          .order('created_at', { ascending: false });
+        // email vit dans auth.users → on le récupère via la fonction profils_avec_email()
+        const [{ data }, { data: profils }] = await Promise.all([
+          supabase.from('ipb_inscriptions')
+            .select('id, created_at, statut, profile:profiles(id, nom_complet)')
+            .order('created_at', { ascending: false }),
+          supabase.rpc('profils_avec_email'),
+        ]);
+        const emailById = new Map<string, string>(
+          ((profils as { id: string; email: string }[]) ?? []).map(p => [p.id, p.email]),
+        );
         if (data) setItems(data.map((r: Record<string, unknown>) => {
-          const profile = r.profile as { nom_complet?: string; email?: string } | null;
+          const profile = r.profile as { id?: string; nom_complet?: string } | null;
           return {
             id: r.id as string,
             nom: profile?.nom_complet ?? 'Inconnu',
-            email: profile?.email ?? '',
+            email: profile?.id ? (emailById.get(profile.id) ?? '') : '',
             date: new Date(r.created_at as string).toLocaleDateString('fr-FR'),
             statut: (r.statut as string) ?? 'en_attente',
           };
