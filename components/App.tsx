@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { StatusBar, AppBar, FrictionModal, Sheet, Toggle, Spinner } from '@/components/ui';
+import { AppBar, FrictionModal, Sheet, Toggle, Spinner } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import { supabase } from '@/lib/supabase';
 import { addFavori, removeFavori } from '@/lib/queries';
@@ -349,7 +349,6 @@ export default function App() {
       <div className="phone">
         <div className="notch" />
         <div className="phone-screen">
-          <StatusBar />
           {!isDetail && (
             <AppBar
               role={role}
