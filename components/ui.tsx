@@ -90,7 +90,9 @@ export function AppBar({ role, initials = '', onSearch, onBell, onProfile }: {
 export function VerseBanner() {
   const [vs, setVs] = useState(DB.VERSES);
   useEffect(() => { getVerset().then(v => setVs([v, v, v, v])); }, []);
-  const run = [...vs, ...vs];
+  // 4 répétitions (duplication paire) : assez de contenu pour remplir les
+  // écrans étroits sans coupure visible, et le translateX(-50%) reste continu.
+  const run = [...vs, ...vs, ...vs, ...vs];
   return (
     <div className="verse-banner">
       <div className="vtag"><Icon n="sparkle" size={13} sw={2} />Verset</div>
