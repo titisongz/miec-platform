@@ -1,10 +1,32 @@
 import { supabase } from './supabase';
+import type { PostgrestError } from '@supabase/supabase-js';
+
+// ── Helpers communs ───────────────────────────────────────────────────────────
+
+// Journalise l'erreur Supabase EXACTE (message + code + details + hint) puis la
+// relance. `never` indique à TypeScript que l'appel interrompt le flux, ce qui
+// permet d'écrire `if (error) failSupabase(...)` et de narrower `error` à null.
+function failSupabase(ctx: string, error: PostgrestError): never {
+  console.error(`[admin-queries] ${ctx} — échec Supabase:`, {
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+  });
+  throw error;
+}
+
+// UUID de l'utilisateur connecté (= profiles.id = auth.uid()), pour created_by.
+// getSession() est local (pas d'aller-retour réseau).
+async function authorId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user.id ?? null;
+}
 
 // ── Verset du jour ────────────────────────────────────────────────────────────
 
 export async function upsertVerset(texte: string, reference: string, medit?: string) {
   const today = new Date().toISOString().split('T')[0];
-  const payload = { texte, reference, meditation: medit ?? null, date_publication: today };
 
   // Pas de contrainte UNIQUE sur date_publication → on ne peut pas utiliser
   // .upsert({ onConflict: 'date_publication' }) (sinon erreur Postgres 42P10).
@@ -16,19 +38,19 @@ export async function upsertVerset(texte: string, reference: string, medit?: str
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (selErr) {
-    console.error('[upsertVerset] erreur SELECT Supabase:', selErr);
-    throw selErr;
-  }
+  if (selErr) failSupabase('upsertVerset (select)', selErr);
 
-  const { error } = existing
-    ? await supabase.from('versets').update(payload).eq('id', existing.id)
-    : await supabase.from('versets').insert(payload);
-  if (error) {
-    console.error('[upsertVerset] erreur écriture Supabase:', {
-      message: error.message, code: error.code, details: error.details, hint: error.hint,
-    });
-    throw error;
+  if (existing) {
+    const { error } = await supabase
+      .from('versets')
+      .update({ texte, reference, meditation: medit ?? null })
+      .eq('id', existing.id);
+    if (error) failSupabase('upsertVerset (update)', error);
+  } else {
+    const { error } = await supabase
+      .from('versets')
+      .insert({ texte, reference, meditation: medit ?? null, date_publication: today, created_by: await authorId() });
+    if (error) failSupabase('upsertVerset (insert)', error);
   }
 }
 
@@ -42,9 +64,11 @@ export async function createEnseignement(data: {
     titre: data.titre, intervenant: data.auteur,
     date: data.date || null, serie_id: data.serie_id || null,
     theme: data.theme || null, youtube_id: data.youtube_id || null,
-    texte: data.texte || null, type: data.type || 'text',
+    // enum type_enseignement = ('video','texte') — surtout PAS 'text'.
+    texte: data.texte || null, type: data.type || 'texte',
+    created_by: await authorId(),
   });
-  if (error) throw error;
+  if (error) failSupabase('createEnseignement', error);
 }
 
 export async function updateEnseignement(id: string, data: Partial<{
@@ -61,19 +85,19 @@ export async function updateEnseignement(id: string, data: Partial<{
   if (data.texte !== undefined) patch.texte = data.texte || null;
   if (data.type) patch.type = data.type;
   const { error } = await supabase.from('enseignements').update(patch).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateEnseignement', error);
 }
 
 export async function deleteEnseignement(id: string) {
   const { error } = await supabase.from('enseignements').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteEnseignement', error);
 }
 
 // ── Séries ────────────────────────────────────────────────────────────────────
 
 export async function createSerie(titre: string): Promise<string> {
   const { data, error } = await supabase.from('series').insert({ titre }).select('id').single();
-  if (error) throw error;
+  if (error) failSupabase('createSerie', error);
   return data.id;
 }
 
@@ -85,7 +109,7 @@ export async function getPendingTemoignages() {
     .select(`id, titre, categorie, anonyme, contenu, created_at, auteur:profiles(nom_complet)`)
     .eq('statut', 'en_attente')
     .order('created_at', { ascending: false });
-  if (error) throw error;
+  if (error) failSupabase('getPendingTemoignages', error);
   return (data ?? []).map(t => ({
     id: t.id,
     titre: t.titre,
@@ -98,17 +122,17 @@ export async function getPendingTemoignages() {
 
 export async function approveTemoignage(id: string) {
   const { error } = await supabase.from('temoignages').update({ statut: 'publie' }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('approveTemoignage', error);
 }
 
 export async function unpublishTemoignage(id: string) {
   const { error } = await supabase.from('temoignages').update({ statut: 'en_attente' }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('unpublishTemoignage', error);
 }
 
 export async function deleteTemoignage(id: string) {
   const { error } = await supabase.from('temoignages').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteTemoignage', error);
 }
 
 // ── Annonces ──────────────────────────────────────────────────────────────────
@@ -117,8 +141,9 @@ export async function createAnnonce(data: { titre: string; cat: string; date: st
   const { error } = await supabase.from('annonces').insert({
     titre: data.titre, categorie: data.cat,
     date_evenement: data.date || null, contenu: data.full,
+    created_by: await authorId(),
   });
-  if (error) throw error;
+  if (error) failSupabase('createAnnonce', error);
 }
 
 export async function updateAnnonce(id: string, data: { titre: string; cat: string; date: string; full: string }) {
@@ -126,19 +151,19 @@ export async function updateAnnonce(id: string, data: { titre: string; cat: stri
     titre: data.titre, categorie: data.cat,
     date_evenement: data.date || null, contenu: data.full,
   }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateAnnonce', error);
 }
 
 export async function deleteAnnonce(id: string) {
   const { error } = await supabase.from('annonces').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteAnnonce', error);
 }
 
 // ── Prières ───────────────────────────────────────────────────────────────────
 
 export async function deletePriere(id: string) {
   const { error } = await supabase.from('prieres').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deletePriere', error);
 }
 
 // ── Ressources ────────────────────────────────────────────────────────────────
@@ -147,8 +172,9 @@ export async function createRessource(data: { titre: string; type: string; cat: 
   const { error } = await supabase.from('ressources').insert({
     titre: data.titre, type: data.type, categorie: data.cat,
     description: data.desc || null, taille: data.taille || null,
+    created_by: await authorId(),
   });
-  if (error) throw error;
+  if (error) failSupabase('createRessource', error);
 }
 
 export async function updateRessource(id: string, data: { titre: string; type: string; cat: string; desc?: string }) {
@@ -156,12 +182,12 @@ export async function updateRessource(id: string, data: { titre: string; type: s
     titre: data.titre, type: data.type, categorie: data.cat,
     description: data.desc || null,
   }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateRessource', error);
 }
 
 export async function deleteRessource(id: string) {
   const { error } = await supabase.from('ressources').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteRessource', error);
 }
 
 // ── Livres ────────────────────────────────────────────────────────────────────
@@ -172,8 +198,9 @@ export async function createLivre(data: { titre: string; auteur: string; annee?:
     annee: data.annee || null, pages: data.pages || null,
     categorie: data.cat, description: data.desc || null,
     extrait: data.extrait || null,
+    created_by: await authorId(),
   });
-  if (error) throw error;
+  if (error) failSupabase('createLivre', error);
 }
 
 export async function updateLivre(id: string, data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string }) {
@@ -183,12 +210,12 @@ export async function updateLivre(id: string, data: { titre: string; auteur: str
     categorie: data.cat, description: data.desc || null,
     extrait: data.extrait || null,
   }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateLivre', error);
 }
 
 export async function deleteLivre(id: string) {
   const { error } = await supabase.from('livres').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteLivre', error);
 }
 
 // ── Sorties ───────────────────────────────────────────────────────────────────
@@ -198,8 +225,9 @@ export async function createSortie(data: { titre: string; date: string; heure?: 
     titre: data.titre, date: data.date || null,
     heure: data.heure || null, theme: data.theme || null,
     programme: data.programme || null, statut: 'a_venir',
+    created_by: await authorId(),
   });
-  if (error) throw error;
+  if (error) failSupabase('createSortie', error);
 }
 
 export async function updateSortie(id: string, data: { titre: string; date: string; heure?: string; equipe?: number; theme?: string; programme?: string }) {
@@ -208,25 +236,25 @@ export async function updateSortie(id: string, data: { titre: string; date: stri
     heure: data.heure || null, theme: data.theme || null,
     programme: data.programme || null,
   }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateSortie', error);
 }
 
 export async function deleteSortie(id: string) {
   const { error } = await supabase.from('sorties').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteSortie', error);
 }
 
 export async function upsertRapportSortie(sortie_id: string, data: {
   resume?: string; equipe?: number; contacts?: number; decisions?: number; temoignages?: string;
 }) {
   const { error: statusError } = await supabase.from('sorties').update({ statut: 'passee' }).eq('id', sortie_id);
-  if (statusError) throw statusError;
+  if (statusError) failSupabase('upsertRapportSortie (statut sortie)', statusError);
   const { error } = await supabase.from('rapports_sorties').upsert({
     sortie_id, resume: data.resume || null,
     taille_equipe: data.equipe || null, contacts: data.contacts || null,
-    decisions: data.decisions || null,
+    decisions: data.decisions || null, created_by: await authorId(),
   }, { onConflict: 'sortie_id' });
-  if (error) throw error;
+  if (error) failSupabase('upsertRapportSortie', error);
 }
 
 // ── IPB — Cours admin ─────────────────────────────────────────────────────────
@@ -236,7 +264,7 @@ export async function createIPBCours(data: { code: string; titre: string; niveau
     code: data.code, titre: data.titre, niveau: data.niveau,
     professeur: data.prof || null, description: data.desc || null,
   });
-  if (error) throw error;
+  if (error) failSupabase('createIPBCours', error);
 }
 
 export async function updateIPBCours(id: string, data: { code?: string; titre?: string; niveau?: string; prof?: string; desc?: string; actif?: boolean }) {
@@ -248,12 +276,12 @@ export async function updateIPBCours(id: string, data: { code?: string; titre?: 
   if (data.desc !== undefined) patch.description = data.desc || null;
   if (data.actif !== undefined) patch.actif = data.actif;
   const { error } = await supabase.from('ipb_cours').update(patch).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateIPBCours', error);
 }
 
 export async function deleteIPBCours(id: string) {
   const { error } = await supabase.from('ipb_cours').delete().eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('deleteIPBCours', error);
 }
 
 // ── Statistiques admin ────────────────────────────────────────────────────────
@@ -288,7 +316,7 @@ export async function getAllProfiles(roleFilter?: string): Promise<Profile[]> {
   let q = supabase.rpc('profils_avec_email');
   if (roleFilter) q = q.eq('role', roleFilter);
   const { data, error } = await q.order('created_at', { ascending: false });
-  if (error) throw error;
+  if (error) failSupabase('getAllProfiles', error);
   return ((data as Profile[]) ?? []).map(p => ({
     id: p.id,
     nom_complet: p.nom_complet ?? '',
@@ -301,12 +329,12 @@ export async function getAllProfiles(roleFilter?: string): Promise<Profile[]> {
 
 export async function updateProfileRole(id: string, role: string) {
   const { error } = await supabase.from('profiles').update({ role }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('updateProfileRole', error);
 }
 
 export async function setEtudiantIPB(id: string, val: boolean) {
   const { error } = await supabase.from('profiles').update({ etudiant_ipb: val }).eq('id', id);
-  if (error) throw error;
+  if (error) failSupabase('setEtudiantIPB', error);
 }
 
 export async function getSuperAdminStats() {

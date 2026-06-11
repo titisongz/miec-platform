@@ -105,12 +105,12 @@ export default function PageEnseignements() {
     try {
       const serie = series.find(s => s.titre === f.serie);
       if (f.id) {
-        await updateEnseignement(f.id, { titre: f.titre, auteur: f.auteur, date: f.date, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'text' });
+        await updateEnseignement(f.id, { titre: f.titre, auteur: f.auteur, date: f.date, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
         setItems(items.map(it => it.id === f.id ? { ...it, ...f, yt: f.yt || undefined } : it));
         pushToast('Enseignement mis à jour', 'ens');
       } else {
-        await createEnseignement({ titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serie?.id, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'text' });
-        const newItem: Enseignement = { id: 'tmp-' + Date.now(), serie: f.serie, titre: f.titre, auteur: f.auteur, date: f.date, duree: '—', type: f.yt ? 'video' : 'text', yt: f.yt || undefined, theme: f.theme, n: 1, total: 1, excerpt: f.excerpt };
+        await createEnseignement({ titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serie?.id, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
+        const newItem: Enseignement = { id: 'tmp-' + Date.now(), serie: f.serie, titre: f.titre, auteur: f.auteur, date: f.date, duree: '—', type: f.yt ? 'video' : 'texte', yt: f.yt || undefined, theme: f.theme, n: 1, total: 1, excerpt: f.excerpt };
         setItems([newItem, ...items]);
         pushToast('Enseignement publié', 'ens');
       }
