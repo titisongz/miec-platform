@@ -27,6 +27,16 @@ function FavBtn({ on, onTog }: { on: boolean; onTog: () => void }) {
 export function DEnseignement({ item: e, back, fav, onFav, onShare }: {
   item: Enseignement; back: () => void; fav: boolean; onFav: () => void; onShare: () => void;
 }) {
+  function handleShare() {
+    // Partage natif (feuille de partage iOS/Android) si disponible, sinon
+    // copie du lien dans le presse-papier + toast « Lien copié » (via onShare).
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator.share({ title: e.titre, text: e.excerpt, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(window.location.href);
+      onShare();
+    }
+  }
   return (
     <div className="screen slidein" style={{ ...accentStyle('ens'), paddingBottom: 40 }}>
       <DetailTop back={back} label="Enseignement" />
@@ -46,22 +56,21 @@ export function DEnseignement({ item: e, back, fav, onFav, onShare }: {
           <Tag c="ens" icon="book">{e.serie}</Tag>
           <span className="tagpill" style={{ background: 'var(--bg-soft)', color: 'var(--ink-2)' }}><Icon n="clock" size={11} sw={2.2} />{e.duree}</span>
           <span style={{ flex: 1 }} /><FavBtn on={fav} onTog={onFav} />
-          <button className="iconbtn" onClick={onShare} style={{ color: 'var(--ink-2)' }}><Icon n="share" size={19} /></button>
+          <button className="iconbtn" onClick={handleShare} style={{ color: 'var(--ink-2)' }}><Icon n="share" size={19} /></button>
         </div>
         <h1 className="h1" style={{ fontSize: 25, marginBottom: 12 }}>{e.titre}</h1>
         <div className="metaline" style={{ fontSize: 13, marginBottom: 18 }}>
           <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, background: 'var(--c)' }}>{e.auteur.split(' ').slice(-1)[0].slice(0, 1)}</span>
           <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{e.auteur}</span><span className="md" /><span>{e.date}</span>
         </div>
-        <div style={{ fontFamily: 'Newsreader,serif', fontSize: 18, fontStyle: 'italic', lineHeight: 1.55, color: 'var(--ink)', padding: '16px 18px', background: 'var(--c-t)', borderRadius: 14, borderLeft: '3px solid var(--c)', marginBottom: 20 }}>{e.excerpt}</div>
         {e.texte && (
           <p style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 16, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>
             {e.texte}
           </p>
         )}
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          <button className="btn btn-soft" style={{ flex: 1 }} onClick={onShare}><Icon n="share" size={17} />Partager</button>
-          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onFav}><Icon n="bookmark" size={17} />{fav ? 'Enregistré' : 'Enregistrer'}</button>
+          <button className="btn btn-soft" style={{ flex: 1 }} onClick={handleShare}><Icon n="share" size={17} />Partager</button>
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onFav}><Icon n="bookmark" size={17} fill={fav ? 'currentColor' : 'none'} />{fav ? 'Enregistré' : 'Enregistrer'}</button>
         </div>
       </div>
     </div>
