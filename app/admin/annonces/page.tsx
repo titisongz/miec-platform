@@ -2,8 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
-import { getAnnonces } from '@/lib/queries';
-import { createAnnonce, updateAnnonce, deleteAnnonce } from '@/lib/admin-queries';
+import { getAnnoncesAdmin, createAnnonce, updateAnnonce, deleteAnnonce } from '@/lib/admin-queries';
 import type { Annonce } from '@/lib/types';
 
 type FormData = { id?: string; titre: string; cat: string; date: string; full: string };
@@ -31,7 +30,7 @@ function AnnModal({ edit, onClose, onSave }: {
             </Select>
           </Field>
           <Field label="Date" icon="calendar">
-            <Input value={f.date} onChange={e => setF({ ...f, date: e.target.value })} placeholder="15 juin 2026" />
+            <Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} />
           </Field>
         </div>
         <Field label="Contenu">
@@ -49,7 +48,7 @@ export default function PageAnnonces() {
   const [del, setDel] = useState<Annonce | null>(null);
   const [toasts, pushToast] = useToasts();
 
-  useEffect(() => { getAnnonces().then(a => { setItems(a); setLoading(false); }); }, []);
+  useEffect(() => { getAnnoncesAdmin().then(a => { setItems(a); setLoading(false); }); }, []);
 
   async function save(f: FormData) {
     try {

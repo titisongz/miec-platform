@@ -2,8 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Reveal, Spinner, Empty, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
-import { getEnseignements, getSeries } from '@/lib/queries';
-import { createEnseignement, updateEnseignement, deleteEnseignement, createSerie } from '@/lib/admin-queries';
+import { getEnseignementsAdmin, getSeriesAdmin, createEnseignement, updateEnseignement, deleteEnseignement, createSerie } from '@/lib/admin-queries';
 import type { Enseignement, Serie } from '@/lib/types';
 
 type FormData = {
@@ -56,7 +55,7 @@ function TeachModal({ edit, series, onClose, onSave }: {
             <Input value={f.auteur} onChange={e => setF({ ...f, auteur: e.target.value })} placeholder="Pasteur Daniel Mbarga" />
           </Field>
           <Field label="Date" icon="calendar">
-            <Input value={f.date} onChange={e => setF({ ...f, date: e.target.value })} placeholder="4 juin 2026" />
+            <Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} />
           </Field>
         </div>
         <div className="a-frow">
@@ -94,7 +93,7 @@ export default function PageEnseignements() {
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => {
-    Promise.all([getEnseignements(), getSeries()]).then(([ens, srs]) => {
+    Promise.all([getEnseignementsAdmin(), getSeriesAdmin()]).then(([ens, srs]) => {
       setItems(ens); setSeries(srs); setLoading(false);
     });
   }, []);

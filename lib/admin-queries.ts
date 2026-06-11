@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { PostgrestError } from '@supabase/supabase-js';
+import type { Enseignement, Serie, Annonce, Sortie } from './types';
 
 // ── Helpers communs ───────────────────────────────────────────────────────────
 
@@ -21,6 +22,91 @@ function failSupabase(ctx: string, error: PostgrestError): never {
 async function authorId(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.user.id ?? null;
+}
+
+// Log non bloquant (les loaders renvoient [] plutôt que de jeter, pour ne pas
+// figer la page d'admin sur l'état « chargement »).
+function logSupabaseError(ctx: string, error: PostgrestError): void {
+  console.error(`[admin-queries] ${ctx} — échec Supabase:`, {
+    message: error.message, code: error.code, details: error.details, hint: error.hint,
+  });
+}
+
+// ── Loaders ADMIN — données RÉELLES uniquement ────────────────────────────────
+// Le back-office ne doit JAMAIS afficher les données de démonstration : leurs
+// ids ('e1', 's1', 'a1'…) ne sont pas des UUID et font échouer delete/update
+// (« invalid input syntax for type uuid »). Donc pas de repli mock, et les dates
+// sont renvoyées BRUTES (ISO 'YYYY-MM-DD') pour alimenter les <input type="date">.
+
+export async function getEnseignementsAdmin(): Promise<Enseignement[]> {
+  const { data, error } = await supabase
+    .from('enseignements')
+    .select(`id, titre, intervenant, date, youtube_id, type, numero, total_serie, theme, texte, serie:series(id, titre)`)
+    .order('created_at', { ascending: false });
+  if (error) { logSupabaseError('getEnseignementsAdmin', error); return []; }
+  return (data ?? []).map(e => ({
+    id: e.id,
+    serie: (e.serie as { titre?: string } | null)?.titre ?? '',
+    titre: e.titre,
+    auteur: e.intervenant ?? '',
+    date: e.date ?? '',
+    duree: '',
+    type: e.type === 'video' ? 'video' : 'texte',
+    yt: e.youtube_id ?? undefined,
+    theme: e.theme ?? '',
+    n: e.numero ?? 1,
+    total: e.total_serie ?? 1,
+    excerpt: e.texte ? e.texte.slice(0, 200) : '',
+  }));
+}
+
+export async function getSeriesAdmin(): Promise<Serie[]> {
+  const { data, error } = await supabase
+    .from('series')
+    .select('id, titre')
+    .order('created_at', { ascending: false });
+  if (error) { logSupabaseError('getSeriesAdmin', error); return []; }
+  return (data ?? []).map(s => ({ id: s.id, titre: s.titre, n: 0, c: '', meta: '' }));
+}
+
+export async function getAnnoncesAdmin(): Promise<Annonce[]> {
+  const { data, error } = await supabase
+    .from('annonces')
+    .select('id, titre, categorie, date_evenement, urgent, contenu')
+    .order('created_at', { ascending: false });
+  if (error) { logSupabaseError('getAnnoncesAdmin', error); return []; }
+  return (data ?? []).map(a => ({
+    id: a.id,
+    titre: a.titre,
+    cat: a.categorie ?? '',
+    date: a.date_evenement ?? '',
+    urgent: a.urgent,
+    excerpt: a.contenu ? a.contenu.slice(0, 160) : '',
+    full: a.contenu ?? '',
+  }));
+}
+
+export async function getSortiesAdmin(): Promise<Sortie[]> {
+  const { data, error } = await supabase
+    .from('sorties')
+    .select(`id, titre, date, heure, statut, theme, programme, rapports:rapports_sorties(taille_equipe, contacts, decisions)`)
+    .order('date', { ascending: false });
+  if (error) { logSupabaseError('getSortiesAdmin', error); return []; }
+  return (data ?? []).map(s => {
+    const rapport = (s.rapports as { taille_equipe?: number; contacts?: number; decisions?: number }[] | null)?.[0];
+    return {
+      id: s.id,
+      titre: s.titre,
+      date: s.date ?? '',
+      heure: s.heure ?? '',
+      statut: s.statut,
+      theme: s.theme ?? '',
+      equipe: rapport?.taille_equipe ?? 0,
+      contacts: rapport?.contacts ?? undefined,
+      decisions: rapport?.decisions ?? undefined,
+      full: s.programme ?? '',
+    };
+  });
 }
 
 // ── Verset du jour ────────────────────────────────────────────────────────────

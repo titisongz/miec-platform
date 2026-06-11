@@ -2,8 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Reveal, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
-import { getSorties } from '@/lib/queries';
-import { createSortie, updateSortie, deleteSortie, upsertRapportSortie } from '@/lib/admin-queries';
+import { getSortiesAdmin, createSortie, updateSortie, deleteSortie, upsertRapportSortie } from '@/lib/admin-queries';
 import type { Sortie } from '@/lib/types';
 
 type SortieForm = { id?: string; titre: string; theme: string; date: string; heure: string; equipe: string; programme: string };
@@ -31,7 +30,7 @@ function SortieModal({ edit, onClose, onSave }: { edit?: Sortie; onClose: () => 
           <Field label="Équipe (nb)"><Input value={f.equipe} onChange={e => setF({ ...f, equipe: e.target.value })} placeholder="12" /></Field>
         </div>
         <div className="a-frow">
-          <Field label="Date" icon="calendar"><Input value={f.date} onChange={e => setF({ ...f, date: e.target.value })} placeholder="15 juin 2026" /></Field>
+          <Field label="Date" icon="calendar"><Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /></Field>
           <Field label="Heure"><Input value={f.heure} onChange={e => setF({ ...f, heure: e.target.value })} placeholder="09h00" /></Field>
         </div>
         <Field label="Programme / Description" opt="optionnel">
@@ -82,7 +81,7 @@ export default function PageEvangelisation() {
   const [del, setDel] = useState<Sortie | null>(null);
   const [toasts, pushToast] = useToasts();
 
-  useEffect(() => { getSorties().then(s => { setItems(s); setLoading(false); }).catch(() => setLoading(false)); }, []);
+  useEffect(() => { getSortiesAdmin().then(s => { setItems(s); setLoading(false); }).catch(() => setLoading(false)); }, []);
 
   async function saveSortie(f: SortieForm) {
     const data = { titre: f.titre, date: f.date, heure: f.heure, equipe: f.equipe ? Number(f.equipe) : undefined, theme: f.theme, programme: f.programme };
