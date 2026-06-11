@@ -811,3 +811,31 @@ export async function getActivityRecente(): Promise<typeof DB.ACTIVITY> {
     ipb: DB.ACTIVITY.ipb,
   };
 }
+
+// ── Compteurs par module (tuiles de l'accueil) ────────────────────────────────
+// Nombre réel d'éléments par catégorie (count exact, head: true → aucune donnée
+// transférée). Le RLS s'applique : un visiteur ne compte que ce qui lui est
+// visible (témoignages publiés, etc.).
+const MODULE_TABLES: Record<string, string> = {
+  enseignements: 'enseignements',
+  priere:        'prieres',
+  temoignages:   'temoignages',
+  evangelisation:'sorties',
+  annonces:      'annonces',
+  ipb:           'ipb_cours',
+  ressources:    'ressources',
+  librairie:     'livres',
+};
+
+export async function getModuleCounts(): Promise<Record<string, number>> {
+  const keys = Object.keys(MODULE_TABLES);
+  const results = await Promise.allSettled(
+    keys.map(k => supabase.from(MODULE_TABLES[k]).select('id', { count: 'exact', head: true })),
+  );
+  const counts: Record<string, number> = {};
+  keys.forEach((k, i) => {
+    const r = results[i];
+    counts[k] = r.status === 'fulfilled' ? (r.value.count ?? 0) : 0;
+  });
+  return counts;
+}

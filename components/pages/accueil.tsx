@@ -6,13 +6,25 @@ import { Reveal, VerseBanner, Tag, Ph } from '@/components/ui';
 import { accentStyle, ACCENT } from '@/lib/accent';
 import type { AccentKey, Enseignement, Annonce, Temoignage, Sortie } from '@/lib/types';
 import DB from '@/lib/data';
-import { getActivityRecente } from '@/lib/queries';
+import { getActivityRecente, getModuleCounts } from '@/lib/queries';
 
-// Métadonnées des tuiles : vidées tant que les vrais compteurs Supabase ne
-// sont pas branchés (évite d'afficher des chiffres fictifs).
-const MODMETA: Record<string, string> = {};
+// Libellé des tuiles = nombre réel d'éléments + nom du module (singulier/pluriel).
+const MOD_NOUNS: Record<string, [string, string]> = {
+  enseignements: ['enseignement', 'enseignements'],
+  priere:        ['sujet', 'sujets'],
+  temoignages:   ['témoignage', 'témoignages'],
+  evangelisation:['sortie', 'sorties'],
+  annonces:      ['annonce', 'annonces'],
+  ipb:           ['cours', 'cours'],
+  ressources:    ['ressource', 'ressources'],
+  librairie:     ['livre', 'livres'],
+};
+function metaLabel(mkey: string, n: number): string {
+  const [s, p] = MOD_NOUNS[mkey] ?? ['élément', 'éléments'];
+  return `${n} ${n > 1 ? p : s}`;
+}
 
-export function Tile({ mkey, onNav, delay }: { mkey: string; onNav: (p: string) => void; delay: number }) {
+export function Tile({ mkey, onNav, delay, count }: { mkey: string; onNav: (p: string) => void; delay: number; count?: number }) {
   const m = DB.MODULES[mkey];
   const a = ACCENT[m.c as AccentKey];
   return (
@@ -23,7 +35,7 @@ export function Tile({ mkey, onNav, delay }: { mkey: string; onNav: (p: string) 
         <span className="ti"><Icon n={m.icon} size={21} sw={1.9} /></span>
         <span>
           <span className="tname" style={{ display: 'block' }}>{m.label}</span>
-          {MODMETA[mkey] && <span className="tmeta">{MODMETA[mkey]}</span>}
+          {count !== undefined && <span className="tmeta">{metaLabel(mkey, count)}</span>}
         </span>
       </button>
     </Reveal>
@@ -57,7 +69,9 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
   onAuth: (mode: string) => void;
 }) {
   const [activity, setActivity] = useState(DB.ACTIVITY);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => { getActivityRecente().then(setActivity); }, []);
+  useEffect(() => { getModuleCounts().then(setCounts); }, []);
 
   const hour = new Date().getHours();
   const greet = hour < 5 ? 'Bonne nuit' : hour < 12 ? 'Bonjour' : hour < 18 ? 'Bel après-midi' : 'Bonsoir';
@@ -107,7 +121,7 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
 
       <div className="section-h"><h2>Explorer</h2></div>
       <div className="tilegrid">
-        {DB.HUB_ORDER.map((k, i) => <Tile key={k} mkey={k} onNav={onNav} delay={i * 40} />)}
+        {DB.HUB_ORDER.map((k, i) => <Tile key={k} mkey={k} onNav={onNav} delay={i * 40} count={counts[k]} />)}
       </div>
 
       {/* « Cette semaine » — affichée seulement s'il existe de vraies données */}
