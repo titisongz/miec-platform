@@ -85,6 +85,7 @@ export async function getEnseignements(theme?: string): Promise<Enseignement[]> 
       n: e.numero ?? 1,
       total: e.total_serie ?? 1,
       excerpt: e.texte ? e.texte.slice(0, 200) : '',
+      texte: e.texte ?? '',
     }));
   } catch {
     return DB.ENSEIGNEMENTS;

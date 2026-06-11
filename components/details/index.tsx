@@ -30,15 +30,17 @@ export function DEnseignement({ item: e, back, fav, onFav, onShare }: {
   return (
     <div className="screen slidein" style={{ ...accentStyle('ens'), paddingBottom: 40 }}>
       <DetailTop back={back} label="Enseignement" />
-      <Ph label={e.type === 'video' ? 'lecteur YouTube · embed' : 'illustration'} style={{ width: '100%', height: 200, borderRadius: 0 }}>
-        {e.type === 'video' && (
-          <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-            <span style={{ width: 62, height: 62, borderRadius: '50%', background: 'rgba(255,255,255,.94)', display: 'grid', placeItems: 'center', color: 'var(--c)', boxShadow: 'var(--sh-2)' }}>
-              <Icon n="play" size={26} />
-            </span>
-          </span>
-        )}
-      </Ph>
+      {e.yt && (
+        <iframe
+          width="100%"
+          height="200"
+          src={`https://www.youtube.com/embed/${e.yt}`}
+          title={e.titre}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          style={{ display: 'block', border: 0 }}
+        />
+      )}
       <div style={{ padding: '18px 18px 0' }}>
         <div style={{ display: 'flex', gap: 7, marginBottom: 13 }}>
           <Tag c="ens" icon="book">{e.serie}</Tag>
@@ -52,13 +54,11 @@ export function DEnseignement({ item: e, back, fav, onFav, onShare }: {
           <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{e.auteur}</span><span className="md" /><span>{e.date}</span>
         </div>
         <div style={{ fontFamily: 'Newsreader,serif', fontSize: 18, fontStyle: 'italic', lineHeight: 1.55, color: 'var(--ink)', padding: '16px 18px', background: 'var(--c-t)', borderRadius: 14, borderLeft: '3px solid var(--c)', marginBottom: 20 }}>{e.excerpt}</div>
-        {[1, 2].map(k => (
-          <p key={k} className="muted" style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 16 }}>
-            {k === 1
-              ? "Bien-aimés, l'Écriture nous appelle à une foi qui agit. Non pas une croyance abstraite, mais une confiance vivante qui se traduit en obéissance quotidienne. Comme le rappelle l'apôtre, la foi sans les œuvres est morte — non parce que les œuvres nous sauvent, mais parce qu'une foi authentique porte nécessairement du fruit."
-              : "Que ce message vous encourage à persévérer. Là où vous voyez la montagne, Dieu voit déjà le passage. Confiez-lui ce qui vous semble impossible, et avancez un pas après l'autre, dans la paix de celui qui tient toutes choses."}
+        {e.texte && (
+          <p style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 16, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>
+            {e.texte}
           </p>
-        ))}
+        )}
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <button className="btn btn-soft" style={{ flex: 1 }} onClick={onShare}><Icon n="share" size={17} />Partager</button>
           <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onFav}><Icon n="bookmark" size={17} />{fav ? 'Enregistré' : 'Enregistrer'}</button>

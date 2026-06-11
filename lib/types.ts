@@ -40,6 +40,7 @@ export interface Enseignement {
   id: string; serie: string; titre: string; auteur: string;
   date: string; duree: string; type: string; yt?: string;
   theme: string; n: number; total: number; excerpt: string;
+  texte?: string;
 }
 
 export interface Serie { id: string; titre: string; n: number; c: string; meta: string }
