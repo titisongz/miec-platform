@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState, ReactNode } from 'react';
 import Image from 'next/image';
 import Icon from './icons';
 import { accentStyle, ACCENT } from '@/lib/accent';
-import type { AccentKey, CSSVars, FrictionConfig } from '@/lib/types';
+import type { AccentKey, CSSVars, FrictionConfig, Verse } from '@/lib/types';
 import DB from '@/lib/data';
 import { getVerset } from '@/lib/queries';
 
@@ -88,17 +88,22 @@ export function AppBar({ role, initials = '', onSearch, onBell, onProfile }: {
 
 /* ---------- verse marquee banner ---------- */
 export function VerseBanner() {
-  const [vs, setVs] = useState(DB.VERSES);
-  useEffect(() => { getVerset().then(v => setVs([v, v, v, v])); }, []);
-  // 4 répétitions (duplication paire) : assez de contenu pour remplir les
-  // écrans étroits sans coupure visible, et le translateX(-50%) reste continu.
-  const run = [...vs, ...vs, ...vs, ...vs];
+  // « Verset du jour » = un seul verset. On part du verset par défaut comme
+  // placeholder le temps de la requête, puis on charge celui du jour.
+  const [v, setV] = useState<Verse>(DB.VERSES[0]);
+  useEffect(() => { getVerset().then(setV); }, []);
+  // Bande de largeur STABLE : 8 copies du même verset = deux moitiés
+  // identiques → translateX(-50%) sans couture, et assez large pour remplir
+  // l'écran (même mobile). La structure ne change jamais au chargement :
+  // seul le texte change, et le key={v.r} remonte proprement la piste pour
+  // repartir de translateX(0) au lieu de sauter en plein défilement.
+  const run = Array.from({ length: 8 });
   return (
     <div className="verse-banner">
       <div className="vtag"><Icon n="sparkle" size={13} sw={2} />Verset</div>
       <div className="marquee">
-        <div className="marquee-track">
-          {run.map((v, i) => (
+        <div className="marquee-track" key={v.r}>
+          {run.map((_, i) => (
             <span className="marquee-item" key={i}>{v.t}<span className="sep" /><b>{v.r}</b></span>
           ))}
         </div>
