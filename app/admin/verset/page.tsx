@@ -18,7 +18,8 @@ export default function PageVerset() {
     try {
       await upsertVerset(v.texte, v.ref, v.medit);
       pushToast('Verset du jour mis à jour', 'slate');
-    } catch {
+    } catch (e) {
+      console.error('[verset] échec de la sauvegarde — erreur Supabase exacte:', e);
       pushToast('Erreur lors de la sauvegarde', 'tem');
     } finally {
       setSaving(false);

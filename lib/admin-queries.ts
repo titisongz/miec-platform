@@ -4,10 +4,32 @@ import { supabase } from './supabase';
 
 export async function upsertVerset(texte: string, reference: string, medit?: string) {
   const today = new Date().toISOString().split('T')[0];
-  const { error } = await supabase
+  const payload = { texte, reference, meditation: medit ?? null, date_publication: today };
+
+  // Pas de contrainte UNIQUE sur date_publication → on ne peut pas utiliser
+  // .upsert({ onConflict: 'date_publication' }) (sinon erreur Postgres 42P10).
+  // On cherche donc le verset déjà publié aujourd'hui, puis update ou insert.
+  const { data: existing, error: selErr } = await supabase
     .from('versets')
-    .upsert({ texte, reference, meditation: medit ?? null, date_publication: today }, { onConflict: 'date_publication' });
-  if (error) throw error;
+    .select('id')
+    .eq('date_publication', today)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (selErr) {
+    console.error('[upsertVerset] erreur SELECT Supabase:', selErr);
+    throw selErr;
+  }
+
+  const { error } = existing
+    ? await supabase.from('versets').update(payload).eq('id', existing.id)
+    : await supabase.from('versets').insert(payload);
+  if (error) {
+    console.error('[upsertVerset] erreur écriture Supabase:', {
+      message: error.message, code: error.code, details: error.details, hint: error.hint,
+    });
+    throw error;
+  }
 }
 
 // ── Enseignements ─────────────────────────────────────────────────────────────
