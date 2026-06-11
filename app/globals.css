@@ -70,6 +70,13 @@ a{color:inherit;text-decoration:none;}
   .phone{width:100vw;height:100vh;border-radius:0;padding:0;box-shadow:none;transform:none;}
   .phone-screen{width:100vw;height:100vh;border-radius:0;}
   .notch{display:none;}
+  /* Sur un vrai téléphone, la barre de statut factice du mockup ferait doublon
+     avec la vraie barre système → on la masque et on respecte les zones de
+     sécurité : notch en haut (appbar), indicateur d'accueil en bas (tabbar). */
+  .statusbar{display:none;}
+  .appbar{padding-top:env(safe-area-inset-top);}
+  .tabbar{padding-bottom:calc(22px + env(safe-area-inset-bottom));}
+  .screen{padding-bottom:calc(96px + env(safe-area-inset-bottom));}
 }
 
 /* ---------- status bar ---------- */

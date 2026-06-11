@@ -70,7 +70,6 @@ export function AppBar({ role, initials = '', onSearch, onBell, onProfile }: {
           <Image src="/emblem.jpeg" alt="MIEC" width={80} height={80} style={{ objectFit: 'contain', borderRadius: 10 }} />
           <div>
             <div style={{ lineHeight: 1 }}>MIEC</div>
-            <div className="sub">Évangile de Christ</div>
           </div>
         </div>
         <div style={{ flex: 1 }} />

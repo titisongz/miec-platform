@@ -147,9 +147,8 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
       )}
 
       <div style={{ textAlign: 'center', padding: '28px 24px 8px', color: 'var(--ink-3)' }}>
-        <Image src="/emblem.jpeg" alt="" width={114} height={114} style={{ opacity: .5, display: 'block', margin: '0 auto 10px' }} />
-        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6 }}>Mission Internationale d&apos;Évangile de Christ</div>
-        <div style={{ fontSize: 11, marginTop: 2 }}>« Allez, faites de toutes les nations des disciples »</div>
+        <Image src="/emblem.jpeg" alt="" width={114} height={114} style={{ opacity: .5, display: 'block', margin: '0 auto 6px' }} />
+        <div style={{ fontSize: 11, marginTop: 0 }}>« Allez, faites de toutes les nations des disciples »</div>
       </div>
     </div>
   );
