@@ -63,29 +63,29 @@ function SubmitSheet({ config, onClose, userId }: {
     if (!ok) return;
     setStep(1);
     try {
-      if (userId) {
-        if (pri) {
-          await supabase.from('prieres').insert({
-            profile_id: userId,
+      if (!userId) throw new Error('Utilisateur non connecté');
+      // La policy RLS exige auteur_id = auth.uid() (ce n'est PAS profile_id).
+      const { error } = pri
+        ? await supabase.from('prieres').insert({
+            auteur_id: userId,
             sujet: v.titre,
             details: v.texte,
             categorie: v.cat,
             anonyme: v.anon,
             urgent: false,
-          });
-        } else {
-          await supabase.from('temoignages').insert({
-            profile_id: userId,
+          })
+        : await supabase.from('temoignages').insert({
+            auteur_id: userId,
             titre: v.titre,
             contenu: v.texte,
             categorie: v.cat,
             anonyme: v.anon,
             statut: 'en_attente',
           });
-        }
-      }
+      if (error) throw error;
       setStep(2);
-    } catch {
+    } catch (e) {
+      console.error('[submit] échec enregistrement', pri ? 'prière' : 'témoignage', ':', e);
       setStep(0);
     }
   }

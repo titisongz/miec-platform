@@ -1,16 +1,17 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getAnnoncesAdmin, createAnnonce, updateAnnonce, deleteAnnonce } from '@/lib/admin-queries';
+import { uploadPhotos } from '@/lib/storage';
 import type { Annonce } from '@/lib/types';
 
-type FormData = { id?: string; titre: string; cat: string; date: string; full: string };
+type FormData = { id?: string; titre: string; cat: string; date: string; full: string; photos: string[]; files: File[] };
 
 function AnnModal({ edit, onClose, onSave }: {
   edit?: Annonce; onClose: () => void; onSave: (f: FormData) => void;
 }) {
-  const [f, setF] = useState<FormData>({ id: edit?.id, titre: edit?.titre ?? '', cat: edit?.cat ?? 'Culte', date: edit?.date ?? '', full: edit?.full ?? '' });
+  const [f, setF] = useState<FormData>({ id: edit?.id, titre: edit?.titre ?? '', cat: edit?.cat ?? 'Culte', date: edit?.date ?? '', full: edit?.full ?? '', photos: edit?.photos ?? [], files: [] });
   const [busy, setBusy] = useState(false);
   const ok = f.titre && f.full;
 
@@ -36,6 +37,9 @@ function AnnModal({ edit, onClose, onSave }: {
         <Field label="Contenu">
           <Textarea value={f.full} onChange={e => setF({ ...f, full: e.target.value })} rows={5} placeholder="Détails de l'annonce…" />
         </Field>
+        <Field label="Photos" opt="optionnel">
+          <MediaPicker urls={f.photos} files={f.files} onUrls={u => setF({ ...f, photos: u })} onFiles={x => setF({ ...f, files: x })} />
+        </Field>
       </div>
     </Modal>
   );
@@ -52,13 +56,15 @@ export default function PageAnnonces() {
 
   async function save(f: FormData) {
     try {
+      const uploaded = f.files.length ? await uploadPhotos(f.files, 'annonces') : [];
+      const photos = [...f.photos, ...uploaded];
       if (f.id) {
-        await updateAnnonce(f.id, { titre: f.titre, cat: f.cat, date: f.date, full: f.full });
-        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, cat: f.cat, date: f.date, full: f.full } : it));
+        await updateAnnonce(f.id, { titre: f.titre, cat: f.cat, date: f.date, full: f.full, photos });
+        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, cat: f.cat, date: f.date, full: f.full, photos } : it));
         pushToast('Annonce mise à jour', 'ann');
       } else {
-        await createAnnonce({ titre: f.titre, cat: f.cat, date: f.date, full: f.full });
-        const newItem: Annonce = { id: 'tmp-' + Date.now(), titre: f.titre, cat: f.cat, date: f.date, urgent: false, excerpt: f.full.slice(0, 160), full: f.full };
+        await createAnnonce({ titre: f.titre, cat: f.cat, date: f.date, full: f.full, photos });
+        const newItem: Annonce = { id: 'tmp-' + Date.now(), titre: f.titre, cat: f.cat, date: f.date, urgent: false, excerpt: f.full.slice(0, 160), full: f.full, photos };
         setItems([newItem, ...items]);
         pushToast('Annonce publiée', 'ann');
       }

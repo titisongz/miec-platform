@@ -1,17 +1,21 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Reveal, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, MediaPicker, Badge, Reveal, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getSortiesAdmin, createSortie, updateSortie, deleteSortie, upsertRapportSortie } from '@/lib/admin-queries';
+import { uploadPhotos } from '@/lib/storage';
 import type { Sortie } from '@/lib/types';
 
-type SortieForm = { id?: string; titre: string; theme: string; date: string; heure: string; equipe: string; programme: string };
+type SortieForm = { id?: string; titre: string; theme: string; date: string; heure: string; equipe: string; programme: string; photos: string[]; files: File[] };
 type RapportForm = { resume: string; contacts: string; decisions: string; equipe: string; temoignages: string };
+
+const SORTIE_THEMES = ['Évangélisme de rue', 'Distribution de bibles', 'Visite à domicile', 'Campus', 'Prison', 'Hôpital'];
 
 function SortieModal({ edit, onClose, onSave }: { edit?: Sortie; onClose: () => void; onSave: (f: SortieForm) => void }) {
   const [f, setF] = useState<SortieForm>({
     id: edit?.id, titre: edit?.titre ?? '', theme: edit?.theme ?? '',
     date: edit?.date ?? '', heure: edit?.heure ?? '', equipe: edit?.equipe ? String(edit.equipe) : '', programme: '',
+    photos: edit?.photos ?? [], files: [],
   });
   const [busy, setBusy] = useState(false);
   const ok = f.titre && f.date;
@@ -22,10 +26,9 @@ function SortieModal({ edit, onClose, onSave }: { edit?: Sortie; onClose: () => 
       <div className="a-form">
         <Field label="Nom de la sortie"><Input value={f.titre} onChange={e => setF({ ...f, titre: e.target.value })} placeholder="Marché Central – Juin 2026" /></Field>
         <div className="a-frow">
-          <Field label="Thème" icon="flame">
-            <Select value={f.theme} onChange={e => setF({ ...f, theme: e.target.value })}>
-              {['', 'Évangélisme de rue', 'Distribution de bibles', 'Visite à domicile', 'Campus', 'Prison', 'Hôpital'].map(t => <option key={t} value={t}>{t || 'Choisir…'}</option>)}
-            </Select>
+          <Field label="Thème" icon="flame" hint="Choisissez-en un ou saisissez le vôtre.">
+            <Input list="sortie-themes" value={f.theme} onChange={e => setF({ ...f, theme: e.target.value })} placeholder="Thème de la sortie" />
+            <datalist id="sortie-themes">{SORTIE_THEMES.map(t => <option key={t} value={t} />)}</datalist>
           </Field>
           <Field label="Équipe (nb)"><Input value={f.equipe} onChange={e => setF({ ...f, equipe: e.target.value })} placeholder="12" /></Field>
         </div>
@@ -35,6 +38,9 @@ function SortieModal({ edit, onClose, onSave }: { edit?: Sortie; onClose: () => 
         </div>
         <Field label="Programme / Description" opt="optionnel">
           <Textarea value={f.programme} onChange={e => setF({ ...f, programme: e.target.value })} rows={3} placeholder="Plan de la sortie, point de rendez-vous…" />
+        </Field>
+        <Field label="Photos" opt="optionnel">
+          <MediaPicker urls={f.photos} files={f.files} onUrls={u => setF({ ...f, photos: u })} onFiles={x => setF({ ...f, files: x })} />
         </Field>
       </div>
     </Modal>
@@ -84,19 +90,21 @@ export default function PageEvangelisation() {
   useEffect(() => { getSortiesAdmin().then(s => { setItems(s); setLoading(false); }).catch(() => setLoading(false)); }, []);
 
   async function saveSortie(f: SortieForm) {
-    const data = { titre: f.titre, date: f.date, heure: f.heure, equipe: f.equipe ? Number(f.equipe) : undefined, theme: f.theme, programme: f.programme };
     try {
+      const uploaded = f.files.length ? await uploadPhotos(f.files, 'sorties') : [];
+      const photos = [...f.photos, ...uploaded];
+      const data = { titre: f.titre, date: f.date, heure: f.heure, equipe: f.equipe ? Number(f.equipe) : undefined, theme: f.theme, programme: f.programme, photos };
       if (f.id) {
         await updateSortie(f.id, data);
-        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, date: f.date, heure: f.heure, equipe: data.equipe ?? 0, theme: f.theme } : it));
+        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, date: f.date, heure: f.heure, equipe: data.equipe ?? 0, theme: f.theme, photos } : it));
         pushToast('Sortie mise à jour', 'eva');
       } else {
         await createSortie(data);
-        const n: Sortie = { id: 'tmp-' + Date.now(), titre: f.titre, date: f.date, heure: f.heure, equipe: data.equipe ?? 0, theme: f.theme, statut: 'a_venir', contacts: 0, decisions: 0, full: f.programme };
+        const n: Sortie = { id: 'tmp-' + Date.now(), titre: f.titre, date: f.date, heure: f.heure, equipe: data.equipe ?? 0, theme: f.theme, statut: 'a_venir', contacts: 0, decisions: 0, full: f.programme, photos };
         setItems([n, ...items]);
         pushToast('Sortie planifiée', 'eva');
       }
-    } catch { pushToast('Erreur', 'tem'); }
+    } catch { pushToast('Erreur lors de l\'enregistrement', 'tem'); }
     setModal(null);
   }
 

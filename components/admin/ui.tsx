@@ -1,6 +1,7 @@
 'use client';
 import React, { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
 import AIcon from './icon';
+import { validatePhotos, MAX_PHOTO_MB } from '@/lib/storage';
 
 // ── Accent map ────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,55 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 export function Select({ children, ...p }: React.SelectHTMLAttributes<HTMLSelectElement> & { children: ReactNode }) {
   return <select className="a-sel" {...p}>{children}</select>;
+}
+
+// Sélecteur de photos : aperçus (URLs déjà uploadées + nouveaux fichiers),
+// ajout/suppression, validation nombre + taille. L'image n'est jamais recadrée.
+function Thumb({ src, onRemove }: { src: string; onRemove: () => void }) {
+  return (
+    <span style={{ position: 'relative', width: 76, height: 76, borderRadius: 10, overflow: 'hidden', flex: '0 0 auto', border: '1px solid var(--line)' }}>
+      <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      <button type="button" onClick={onRemove} aria-label="Retirer"
+        style={{ position: 'absolute', top: 3, right: 3, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,.6)', color: '#fff', display: 'grid', placeItems: 'center' }}>
+        <AIcon n="x" size={13} sw={2.4} />
+      </button>
+    </span>
+  );
+}
+
+export function MediaPicker({ urls, files, onUrls, onFiles, max = 5 }: {
+  urls: string[]; files: File[];
+  onUrls: (u: string[]) => void; onFiles: (f: File[]) => void; max?: number;
+}) {
+  const [err, setErr] = useState('');
+  const total = urls.length + files.length;
+  function add(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    const picked = Array.from(list);
+    const e = validatePhotos(picked, total);
+    if (e) { setErr(e); return; }
+    setErr('');
+    onFiles([...files, ...picked]);
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+        {urls.map((u, i) => <Thumb key={'u' + i} src={u} onRemove={() => onUrls(urls.filter((_, j) => j !== i))} />)}
+        {files.map((f, i) => <Thumb key={'f' + i} src={URL.createObjectURL(f)} onRemove={() => onFiles(files.filter((_, j) => j !== i))} />)}
+        {total < max && (
+          <label style={{ width: 76, height: 76, borderRadius: 10, border: '1.5px dashed var(--line-2)', display: 'grid', placeItems: 'center', color: 'var(--ink-3)', cursor: 'pointer', flex: '0 0 auto' }}>
+            <AIcon n="upload" size={20} />
+            <input type="file" accept="image/*" multiple={max > 1} style={{ display: 'none' }}
+              onChange={e => { add(e.target.files); e.target.value = ''; }} />
+          </label>
+        )}
+      </div>
+      {err && <div style={{ color: '#dc2626', fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>{err}</div>}
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+        {max > 1 ? `Jusqu'à ${max} photos` : '1 photo'} · {MAX_PHOTO_MB} Mo max · affichée sans recadrage.
+      </div>
+    </div>
+  );
 }
 
 export function Toggle({ on, onTog }: { on: boolean; onTog: () => void }) {

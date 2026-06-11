@@ -1,9 +1,36 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import Icon from '@/components/icons';
 import { Reveal, Tag, Ph } from '@/components/ui';
 import { accentStyle, RES_ICON } from '@/lib/accent';
 import type { Enseignement, Temoignage, Annonce, Sortie, Livre, Priere, Ressource } from '@/lib/types';
+
+/* ---------- galerie de photos (taille naturelle, ouverture au clic) ---------- */
+function PhotoStrip({ photos, alt = '' }: { photos?: string[]; alt?: string }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (!photos || photos.length === 0) return null;
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {photos.map((src, i) => (
+          // height:auto → la photo garde son ratio, elle n'est pas déformée/recadrée.
+          <img key={i} src={src} alt={alt} loading="lazy" onClick={() => setOpen(src)}
+            style={{ width: '100%', height: 'auto', display: 'block', cursor: 'zoom-in' }} />
+        ))}
+      </div>
+      {open && (
+        <div onClick={() => setOpen(null)} role="dialog" aria-modal="true"
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.93)', display: 'grid', placeItems: 'center', padding: 16 }}>
+          <img src={open} alt={alt} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          <button onClick={() => setOpen(null)} aria-label="Fermer"
+            style={{ position: 'absolute', top: 14, right: 14, width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center' }}>
+            <Icon n="x" size={22} />
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
 
 /* ---------- shared detail header ---------- */
 function DetailTop({ back, label }: { back: () => void; label: string }) {
@@ -106,7 +133,7 @@ export function DAnnonce({ item: a, back, fav, onFav, onShare }: {
   return (
     <div className="screen slidein" style={{ ...accentStyle('ann'), paddingBottom: 40 }}>
       <DetailTop back={back} label="Annonce" />
-      <Ph label="affiche de l'annonce" style={{ width: '100%', height: 170, borderRadius: 0 }} />
+      <PhotoStrip photos={a.photos} alt={a.titre} />
       <div style={{ padding: '18px 20px 0' }}>
         <div style={{ display: 'flex', gap: 7, marginBottom: 14 }}>
           <Tag c="ann" icon="mega">{a.cat}</Tag>
@@ -136,7 +163,7 @@ export function DSortie({ item: s, back, onShare }: {
   return (
     <div className="screen slidein" style={{ ...accentStyle('eva'), paddingBottom: 40 }}>
       <DetailTop back={back} label={passee ? 'Rapport de sortie' : "Sortie d'évangélisation"} />
-      <Ph label="photo de la sortie" style={{ width: '100%', height: 180, borderRadius: 0 }} />
+      <PhotoStrip photos={s.photos} alt={s.titre} />
       <div style={{ padding: '18px 20px 0' }}>
         <div style={{ display: 'flex', gap: 7, marginBottom: 13 }}>
           <Tag c="eva" icon="sparkle">Thème · {s.theme}</Tag>
@@ -178,7 +205,9 @@ export function DLivre({ item: b, back, fav, onFav }: {
     <div className="screen slidein" style={{ ...accentStyle('res'), paddingBottom: 40 }}>
       <DetailTop back={back} label="Librairie" />
       <div style={{ padding: '20px 20px 0', display: 'flex', gap: 18 }}>
-        <Ph label="couverture" style={{ width: 118, height: 166, flex: '0 0 auto', borderRadius: 12, boxShadow: 'var(--sh-3)' }} />
+        {b.couverture
+          ? <img src={b.couverture} alt={b.titre} style={{ width: 118, height: 166, flex: '0 0 auto', borderRadius: 12, objectFit: 'cover', boxShadow: 'var(--sh-3)' }} />
+          : <Ph label="couverture" style={{ width: 118, height: 166, flex: '0 0 auto', borderRadius: 12, boxShadow: 'var(--sh-3)' }} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <Tag c="res">{b.cat}</Tag>
           <h1 className="h1" style={{ fontSize: 22, margin: '10px 0 6px' }}>{b.titre}</h1>
@@ -287,7 +316,9 @@ export function DRessource({ item: r, back }: {
                 <div className="t3" style={{ fontSize: 11.5, display: 'flex', justifyContent: 'space-between' }}><span>2:00</span><span>{r.taille}</span></div>
               </div>
             </div>
-          : <Ph label="aperçu du fichier" style={{ width: '100%', height: 260, borderRadius: 14 }} />}
+          : r.photo
+            ? <PhotoStrip photos={[r.photo]} alt={r.titre} />
+            : <Ph label="aperçu du fichier" style={{ width: '100%', height: 260, borderRadius: 14 }} />}
         <button className="btn btn-primary btn-block" style={{ marginTop: 18 }}><Icon n="dl" size={18} />Télécharger</button>
       </div>
     </div>

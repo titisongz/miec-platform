@@ -7,13 +7,14 @@ import { createIPBCours, updateIPBCours, deleteIPBCours } from '@/lib/admin-quer
 import { supabase } from '@/lib/supabase';
 import type { IPBCours, IPBProgramme } from '@/lib/types';
 
-type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string };
+type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string };
 type Inscription = { id: string; nom: string; email: string; date: string; statut: string };
 
 function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () => void; onSave: (f: CoursForm) => void }) {
   const [f, setF] = useState<CoursForm>({
     id: edit?.id, code: edit?.code ?? '', titre: edit?.titre ?? '',
-    niveau: 'N1', prof: edit?.prof ?? '', desc: '',
+    niveau: edit?.niveau || 'N1', prof: edit?.prof ?? '', desc: edit?.desc ?? '',
+    modules: edit?.modules ? String(edit.modules) : '',
   });
   const [busy, setBusy] = useState(false);
   const ok = f.code && f.titre;
@@ -22,13 +23,14 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
     <Modal accent="ipb" icon="cap" wide title={edit ? 'Modifier le cours' : 'Ajouter un cours'} onClose={onClose}
       footer={<><button className="a-btn a-btn-ghost" onClick={onClose}>Annuler</button><button className="a-btn a-btn-primary" disabled={!ok || busy} onClick={submit}>{busy ? <><Spinner />…</> : <><AIcon n="check" size={17} />{edit ? 'Enregistrer' : 'Créer'}</>}</button></>}>
       <div className="a-form">
-        <div className="a-frow">
+        <div className="a-frow three">
           <Field label="Code" icon="hash"><Input value={f.code} onChange={e => setF({ ...f, code: e.target.value })} placeholder="TH101" /></Field>
           <Field label="Niveau">
             <Select value={f.niveau} onChange={e => setF({ ...f, niveau: e.target.value })}>
               {['N1', 'N2', 'N3', 'M1', 'M2'].map(n => <option key={n}>{n}</option>)}
             </Select>
           </Field>
+          <Field label="Modules" hint="Nombre de modules"><Input value={f.modules} onChange={e => setF({ ...f, modules: e.target.value })} placeholder="8" /></Field>
         </div>
         <Field label="Titre du cours"><Input value={f.titre} onChange={e => setF({ ...f, titre: e.target.value })} placeholder="Introduction à la théologie systématique" /></Field>
         <Field label="Professeur" icon="user" opt="optionnel"><Input value={f.prof} onChange={e => setF({ ...f, prof: e.target.value })} placeholder="Prof. Jean-Pierre Bokwe" /></Field>
@@ -85,15 +87,16 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
   useEffect(() => { getIPBCours().then(c => { setCours(c); setLoading(false); }).catch(() => setLoading(false)); }, []);
 
   async function save(f: CoursForm) {
-    const data = { code: f.code, titre: f.titre, niveau: f.niveau, prof: f.prof, desc: f.desc };
+    const modules = f.modules ? Number(f.modules) : undefined;
+    const data = { code: f.code, titre: f.titre, niveau: f.niveau, prof: f.prof, desc: f.desc, modules };
     try {
       if (f.id) {
         await updateIPBCours(f.id, data);
-        setCours(cours.map(c => c.id === f.id ? { ...c, code: f.code, titre: f.titre, prof: f.prof } : c));
+        setCours(cours.map(c => c.id === f.id ? { ...c, code: f.code, titre: f.titre, prof: f.prof, niveau: f.niveau, desc: f.desc, modules: modules ?? c.modules } : c));
         pushToast('Cours mis à jour', 'ipb');
       } else {
         await createIPBCours(data);
-        const n: IPBCours = { id: 'tmp-' + Date.now(), code: f.code, titre: f.titre, prof: f.prof, prog: 0, modules: 0, fait: 0, docs: [] };
+        const n: IPBCours = { id: 'tmp-' + Date.now(), code: f.code, titre: f.titre, prof: f.prof, prog: 0, modules: modules ?? 0, fait: 0, docs: [], niveau: f.niveau, desc: f.desc };
         setCours([n, ...cours]);
         pushToast('Cours créé', 'ipb');
       }

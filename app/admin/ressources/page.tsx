@@ -1,34 +1,26 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getRessources } from '@/lib/queries';
 import { createRessource, updateRessource, deleteRessource } from '@/lib/admin-queries';
+import { uploadPhotos } from '@/lib/storage';
 import type { Ressource } from '@/lib/types';
 
-type FormData = { id?: string; titre: string; type: string; cat: string; desc: string; taille: string };
+type FormData = { id?: string; titre: string; type: string; cat: string; desc: string; taille: string; photos: string[]; files: File[] };
 
 const RES_TYPES = [{ v: 'pdf', l: 'PDF' }, { v: 'audio', l: 'Audio' }, { v: 'partition', l: 'Partition' }, { v: 'plan', l: 'Plan de lecture' }, { v: 'video', l: 'Vidéo' }];
 function resIcon(t: string) { return t === 'audio' ? 'play' : t === 'plan' ? 'calendar' : t === 'video' ? 'play' : 'filetext'; }
 
 function ResModal({ edit, onClose, onSave }: { edit?: Ressource; onClose: () => void; onSave: (f: FormData) => void }) {
-  const [f, setF] = useState<FormData>({ id: edit?.id, titre: edit?.titre ?? '', type: edit?.type ?? 'pdf', cat: edit?.cat ?? 'Études', desc: '', taille: edit?.taille ?? '' });
+  const [f, setF] = useState<FormData>({ id: edit?.id, titre: edit?.titre ?? '', type: edit?.type ?? 'pdf', cat: edit?.cat ?? 'Études', desc: '', taille: edit?.taille ?? '', photos: edit?.photo ? [edit.photo] : [], files: [] });
   const [busy, setBusy] = useState(false);
-  const [file, setFile] = useState(edit ? edit.titre + '.pdf' : '');
   const ok = f.titre;
   function submit() { if (!ok) return; setBusy(true); onSave(f); }
   return (
     <Modal accent="res" icon="folder" wide title={edit ? 'Modifier la ressource' : 'Nouvelle ressource'} onClose={onClose}
       footer={<><button className="a-btn a-btn-ghost" onClick={onClose}>Annuler</button><button className="a-btn a-btn-primary" disabled={!ok || busy} onClick={submit}>{busy ? <><Spinner />…</> : <><AIcon n="check" size={17} />{edit ? 'Enregistrer' : 'Publier'}</>}</button></>}>
       <div className="a-form">
-        {!edit && (
-          <div className="a-drop" onClick={() => setFile('document.pdf')}>
-            <div className="di"><AIcon n={file ? 'filetext' : 'upload'} size={22} /></div>
-            {file
-              ? <div style={{ fontWeight: 700, fontSize: 14 }}>{file} <span style={{ fontWeight: 600, color: 'var(--ink-3)' }}>· prêt</span></div>
-              : <><div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 3 }}>Déposez un fichier ou cliquez pour parcourir</div><div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>PDF, MP3, image — 25 Mo max</div></>}
-          </div>
-        )}
         <Field label="Titre"><Input value={f.titre} onChange={e => setF({ ...f, titre: e.target.value })} placeholder="Guide du nouveau converti" /></Field>
         <div className="a-frow">
           <Field label="Type">
@@ -40,6 +32,9 @@ function ResModal({ edit, onClose, onSave }: { edit?: Ressource; onClose: () => 
         </div>
         <Field label="Description" opt="optionnelle">
           <Textarea value={f.desc} onChange={e => setF({ ...f, desc: e.target.value })} rows={3} placeholder="À quoi sert cette ressource…" />
+        </Field>
+        <Field label="Photo" opt="optionnelle">
+          <MediaPicker max={1} urls={f.photos} files={f.files} onUrls={u => setF({ ...f, photos: u })} onFiles={x => setF({ ...f, files: x })} />
         </Field>
       </div>
     </Modal>
@@ -57,13 +52,15 @@ export default function PageRessources() {
 
   async function save(f: FormData) {
     try {
+      const uploaded = f.files.length ? await uploadPhotos(f.files, 'ressources') : [];
+      const photo = [...f.photos, ...uploaded][0];
       if (f.id) {
-        await updateRessource(f.id, { titre: f.titre, type: f.type, cat: f.cat, desc: f.desc });
-        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, type: f.type, cat: f.cat } : it));
+        await updateRessource(f.id, { titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, photo });
+        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, type: f.type, cat: f.cat, photo } : it));
         pushToast('Ressource mise à jour', 'res');
       } else {
-        await createRessource({ titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, taille: f.taille });
-        const n: Ressource = { id: 'tmp-' + Date.now(), titre: f.titre, type: f.type, fmt: f.type.toUpperCase(), taille: '—', cat: f.cat, date: 'à l\'instant' };
+        await createRessource({ titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, taille: f.taille, photo });
+        const n: Ressource = { id: 'tmp-' + Date.now(), titre: f.titre, type: f.type, fmt: f.type.toUpperCase(), taille: '—', cat: f.cat, date: 'à l\'instant', photo };
         setItems([n, ...items]);
         pushToast('Ressource ajoutée', 'res');
       }

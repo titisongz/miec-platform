@@ -1,18 +1,20 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getLivres } from '@/lib/queries';
 import { createLivre, updateLivre, deleteLivre } from '@/lib/admin-queries';
+import { uploadPhotos } from '@/lib/storage';
 import type { Livre } from '@/lib/types';
 
-type FormData = { id?: string; titre: string; auteur: string; annee: string; pages: string; cat: string; desc: string; extrait: string };
+type FormData = { id?: string; titre: string; auteur: string; annee: string; pages: string; cat: string; desc: string; extrait: string; couverture: string[]; files: File[] };
 
 function LivreModal({ edit, onClose, onSave }: { edit?: Livre; onClose: () => void; onSave: (f: FormData) => void }) {
   const [f, setF] = useState<FormData>({
     id: edit?.id, titre: edit?.titre ?? '', auteur: edit?.auteur ?? '',
     annee: edit?.annee ? String(edit.annee) : '', pages: edit?.pages ? String(edit.pages) : '',
     cat: edit?.cat ?? 'Théologie', desc: edit?.desc ?? '', extrait: edit?.extrait ?? '',
+    couverture: edit?.couverture ? [edit.couverture] : [], files: [],
   });
   const [busy, setBusy] = useState(false);
   const ok = f.titre && f.auteur;
@@ -23,6 +25,9 @@ function LivreModal({ edit, onClose, onSave }: { edit?: Livre; onClose: () => vo
       <div className="a-form">
         <Field label="Titre du livre"><Input value={f.titre} onChange={e => setF({ ...f, titre: e.target.value })} placeholder="Enracinés en Christ" /></Field>
         <Field label="Auteur" icon="user"><Input value={f.auteur} onChange={e => setF({ ...f, auteur: e.target.value })} placeholder="Pasteur Daniel Mbarga" /></Field>
+        <Field label="Couverture" opt="optionnelle">
+          <MediaPicker max={1} urls={f.couverture} files={f.files} onUrls={u => setF({ ...f, couverture: u })} onFiles={x => setF({ ...f, files: x })} />
+        </Field>
         <div className="a-frow three">
           <Field label="Catégorie">
             <Select value={f.cat} onChange={e => setF({ ...f, cat: e.target.value })}>
@@ -55,15 +60,17 @@ export default function PageLibrairie() {
   async function save(f: FormData) {
     const annee = f.annee ? Number(f.annee) : 0;
     const pages = f.pages ? Number(f.pages) : 0;
-    const data = { titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait };
     try {
+      const uploaded = f.files.length ? await uploadPhotos(f.files, 'livres') : [];
+      const couverture = [...f.couverture, ...uploaded][0];
+      const data = { titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture };
       if (f.id) {
         await updateLivre(f.id, data);
-        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait } : it));
+        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture } : it));
         pushToast('Livre mis à jour', 'res');
       } else {
         await createLivre(data);
-        const n: Livre = { id: 'tmp-' + Date.now(), titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait };
+        const n: Livre = { id: 'tmp-' + Date.now(), titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture };
         setItems([n, ...items]);
         pushToast('Livre ajouté', 'res');
       }

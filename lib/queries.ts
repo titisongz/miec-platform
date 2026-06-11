@@ -168,7 +168,7 @@ export async function getAnnonces(categorie?: string): Promise<Annonce[]> {
   try {
     let query = supabase
       .from('annonces')
-      .select('id, titre, categorie, date_evenement, urgent, contenu')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (categorie) query = query.eq('categorie', categorie);
@@ -184,6 +184,7 @@ export async function getAnnonces(categorie?: string): Promise<Annonce[]> {
       urgent: a.urgent,
       excerpt: a.contenu ? a.contenu.slice(0, 160) : '',
       full: a.contenu ?? '',
+      photos: a.photos ?? [],
     }));
   } catch {
     return DB.ANNONCES;
@@ -233,7 +234,7 @@ export async function getRessources(categorie?: string): Promise<Ressource[]> {
   try {
     let query = supabase
       .from('ressources')
-      .select('id, titre, type, taille, categorie, created_at')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (categorie) query = query.eq('categorie', categorie);
@@ -249,6 +250,7 @@ export async function getRessources(categorie?: string): Promise<Ressource[]> {
       taille: r.taille ?? '',
       cat: r.categorie ?? '',
       date: fmtDate(r.created_at),
+      photo: r.photo_url ?? undefined,
     }));
   } catch {
     return DB.RESSOURCES;
@@ -261,7 +263,7 @@ export async function getLivres(): Promise<Livre[]> {
   try {
     const { data, error } = await supabase
       .from('livres')
-      .select('id, titre, auteur, annee, pages, categorie, description, extrait')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error || !data?.length) return DB.LIVRES;
@@ -275,6 +277,7 @@ export async function getLivres(): Promise<Livre[]> {
       cat: l.categorie ?? '',
       desc: l.description ?? '',
       extrait: l.extrait ?? '',
+      couverture: l.couverture_url ?? undefined,
     }));
   } catch {
     return DB.LIVRES;
@@ -287,10 +290,7 @@ export async function getSorties(): Promise<Sortie[]> {
   try {
     const { data, error } = await supabase
       .from('sorties')
-      .select(`
-        id, titre, date, heure, statut, theme, programme,
-        rapports:rapports_sorties(taille_equipe, contacts, decisions)
-      `)
+      .select('*, rapports:rapports_sorties(taille_equipe, contacts, decisions)')
       .order('date', { ascending: false });
 
     if (error || !data?.length) return DB.SORTIES;
@@ -308,6 +308,7 @@ export async function getSorties(): Promise<Sortie[]> {
         contacts: rapport?.contacts ?? undefined,
         decisions: rapport?.decisions ?? undefined,
         full: s.programme ?? '',
+        photos: s.photos ?? [],
       };
     });
   } catch {
@@ -359,12 +360,10 @@ export async function getIPBProgramme(): Promise<IPBProgramme[]> {
 
 export async function getIPBCours(): Promise<IPBCours[]> {
   try {
+    // select('*') = résilient si niveau/description n'existent pas encore.
     const { data, error } = await supabase
       .from('ipb_cours')
-      .select(`
-        id, code, titre, professeur, nombre_modules,
-        docs:ipb_documents(titre, type)
-      `)
+      .select('*, docs:ipb_documents(titre, type)')
       .order('code');
 
     if (error || !data?.length) return DB.IPB_COURS;
@@ -381,6 +380,8 @@ export async function getIPBCours(): Promise<IPBCours[]> {
         t: d.titre,
         f: d.type ?? '',
       })),
+      niveau: c.niveau ?? '',
+      desc: c.description ?? '',
     }));
   } catch {
     return DB.IPB_COURS;

@@ -52,7 +52,7 @@ export interface Temoignage {
 
 export interface Annonce {
   id: string; titre: string; cat: string; date: string;
-  urgent: boolean; excerpt: string; full: string;
+  urgent: boolean; excerpt: string; full: string; photos?: string[];
 }
 
 export interface Priere {
@@ -62,24 +62,25 @@ export interface Priere {
 
 export interface Ressource {
   id: string; titre: string; type: string; fmt: string;
-  taille: string; cat: string; date: string;
+  taille: string; cat: string; date: string; photo?: string;
 }
 
 export interface Livre {
   id: string; titre: string; auteur: string; annee: number;
-  pages: number; cat: string; desc: string; extrait: string;
+  pages: number; cat: string; desc: string; extrait: string; couverture?: string;
 }
 
 export interface Sortie {
   id: string; titre: string; date: string; heure: string;
   statut: string; theme: string; equipe: number;
-  contacts?: number; decisions?: number; full: string;
+  contacts?: number; decisions?: number; full: string; photos?: string[];
 }
 
 export interface IPBCours {
   id: string; code: string; titre: string; prof: string;
   prog: number; modules: number; fait: number;
   docs: { t: string; f: string }[];
+  niveau?: string; desc?: string;
 }
 
 export interface IPBProgramme {

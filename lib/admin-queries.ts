@@ -71,9 +71,10 @@ export async function getSeriesAdmin(): Promise<Serie[]> {
 }
 
 export async function getAnnoncesAdmin(): Promise<Annonce[]> {
+  // select('*') = résilient si la colonne `photos` n'a pas encore été ajoutée.
   const { data, error } = await supabase
     .from('annonces')
-    .select('id, titre, categorie, date_evenement, urgent, contenu')
+    .select('*')
     .order('created_at', { ascending: false });
   if (error) { logSupabaseError('getAnnoncesAdmin', error); return []; }
   return (data ?? []).map(a => ({
@@ -84,13 +85,14 @@ export async function getAnnoncesAdmin(): Promise<Annonce[]> {
     urgent: a.urgent,
     excerpt: a.contenu ? a.contenu.slice(0, 160) : '',
     full: a.contenu ?? '',
+    photos: a.photos ?? [],
   }));
 }
 
 export async function getSortiesAdmin(): Promise<Sortie[]> {
   const { data, error } = await supabase
     .from('sorties')
-    .select(`id, titre, date, heure, statut, theme, programme, rapports:rapports_sorties(taille_equipe, contacts, decisions)`)
+    .select('*, rapports:rapports_sorties(taille_equipe, contacts, decisions)')
     .order('date', { ascending: false });
   if (error) { logSupabaseError('getSortiesAdmin', error); return []; }
   return (data ?? []).map(s => {
@@ -106,6 +108,7 @@ export async function getSortiesAdmin(): Promise<Sortie[]> {
       contacts: rapport?.contacts ?? undefined,
       decisions: rapport?.decisions ?? undefined,
       full: s.programme ?? '',
+      photos: s.photos ?? [],
     };
   });
 }
@@ -224,19 +227,21 @@ export async function deleteTemoignage(id: string) {
 
 // ── Annonces ──────────────────────────────────────────────────────────────────
 
-export async function createAnnonce(data: { titre: string; cat: string; date: string; full: string }) {
+export async function createAnnonce(data: { titre: string; cat: string; date: string; full: string; photos?: string[] }) {
   const { error } = await supabase.from('annonces').insert({
     titre: data.titre, categorie: data.cat,
     date_evenement: data.date || null, contenu: data.full,
+    ...(data.photos?.length ? { photos: data.photos } : {}),
     created_by: await authorId(),
   });
   if (error) failSupabase('createAnnonce', error);
 }
 
-export async function updateAnnonce(id: string, data: { titre: string; cat: string; date: string; full: string }) {
+export async function updateAnnonce(id: string, data: { titre: string; cat: string; date: string; full: string; photos?: string[] }) {
   const { error } = await supabase.from('annonces').update({
     titre: data.titre, categorie: data.cat,
     date_evenement: data.date || null, contenu: data.full,
+    ...(data.photos?.length ? { photos: data.photos } : {}),
   }).eq('id', id);
   if (error) failSupabase('updateAnnonce', error);
 }
@@ -255,19 +260,21 @@ export async function deletePriere(id: string) {
 
 // ── Ressources ────────────────────────────────────────────────────────────────
 
-export async function createRessource(data: { titre: string; type: string; cat: string; desc?: string; taille?: string }) {
+export async function createRessource(data: { titre: string; type: string; cat: string; desc?: string; taille?: string; photo?: string }) {
   const { error } = await supabase.from('ressources').insert({
     titre: data.titre, type: data.type, categorie: data.cat,
-    description: data.desc || null, taille: data.taille || null,
-    created_by: await authorId(),
+    taille: data.taille || null, created_by: await authorId(),
+    ...(data.desc ? { description: data.desc } : {}),
+    ...(data.photo ? { photo_url: data.photo } : {}),
   });
   if (error) failSupabase('createRessource', error);
 }
 
-export async function updateRessource(id: string, data: { titre: string; type: string; cat: string; desc?: string }) {
+export async function updateRessource(id: string, data: { titre: string; type: string; cat: string; desc?: string; photo?: string }) {
   const { error } = await supabase.from('ressources').update({
     titre: data.titre, type: data.type, categorie: data.cat,
-    description: data.desc || null,
+    ...(data.desc ? { description: data.desc } : {}),
+    ...(data.photo ? { photo_url: data.photo } : {}),
   }).eq('id', id);
   if (error) failSupabase('updateRessource', error);
 }
@@ -279,23 +286,24 @@ export async function deleteRessource(id: string) {
 
 // ── Livres ────────────────────────────────────────────────────────────────────
 
-export async function createLivre(data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string }) {
+export async function createLivre(data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string; couverture?: string }) {
   const { error } = await supabase.from('livres').insert({
     titre: data.titre, auteur: data.auteur,
     annee: data.annee || null, pages: data.pages || null,
     categorie: data.cat, description: data.desc || null,
-    extrait: data.extrait || null,
+    extrait: data.extrait || null, couverture_url: data.couverture || null,
     created_by: await authorId(),
   });
   if (error) failSupabase('createLivre', error);
 }
 
-export async function updateLivre(id: string, data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string }) {
+export async function updateLivre(id: string, data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string; couverture?: string }) {
   const { error } = await supabase.from('livres').update({
     titre: data.titre, auteur: data.auteur,
     annee: data.annee || null, pages: data.pages || null,
     categorie: data.cat, description: data.desc || null,
     extrait: data.extrait || null,
+    ...(data.couverture !== undefined ? { couverture_url: data.couverture || null } : {}),
   }).eq('id', id);
   if (error) failSupabase('updateLivre', error);
 }
@@ -307,21 +315,24 @@ export async function deleteLivre(id: string) {
 
 // ── Sorties ───────────────────────────────────────────────────────────────────
 
-export async function createSortie(data: { titre: string; date: string; heure?: string; equipe?: number; theme?: string; programme?: string }) {
+export async function createSortie(data: { titre: string; date: string; heure?: string; equipe?: number; theme?: string; programme?: string; photos?: string[] }) {
   const { error } = await supabase.from('sorties').insert({
     titre: data.titre, date: data.date || null,
     heure: data.heure || null, theme: data.theme || null,
     programme: data.programme || null, statut: 'a_venir',
+    // `photos` n'est inclus que s'il y en a (sinon insert OK même avant le SQL).
+    ...(data.photos?.length ? { photos: data.photos } : {}),
     created_by: await authorId(),
   });
   if (error) failSupabase('createSortie', error);
 }
 
-export async function updateSortie(id: string, data: { titre: string; date: string; heure?: string; equipe?: number; theme?: string; programme?: string }) {
+export async function updateSortie(id: string, data: { titre: string; date: string; heure?: string; equipe?: number; theme?: string; programme?: string; photos?: string[] }) {
   const { error } = await supabase.from('sorties').update({
     titre: data.titre, date: data.date || null,
     heure: data.heure || null, theme: data.theme || null,
     programme: data.programme || null,
+    ...(data.photos?.length ? { photos: data.photos } : {}),
   }).eq('id', id);
   if (error) failSupabase('updateSortie', error);
 }
@@ -346,22 +357,24 @@ export async function upsertRapportSortie(sortie_id: string, data: {
 
 // ── IPB — Cours admin ─────────────────────────────────────────────────────────
 
-export async function createIPBCours(data: { code: string; titre: string; niveau: string; prof?: string; desc?: string }) {
+export async function createIPBCours(data: { code: string; titre: string; niveau?: string; prof?: string; desc?: string; modules?: number }) {
   const { error } = await supabase.from('ipb_cours').insert({
-    code: data.code, titre: data.titre, niveau: data.niveau,
-    professeur: data.prof || null, description: data.desc || null,
+    code: data.code, titre: data.titre,
+    professeur: data.prof || null, nombre_modules: data.modules ?? null,
+    ...(data.niveau ? { niveau: data.niveau } : {}),
+    ...(data.desc ? { description: data.desc } : {}),
   });
   if (error) failSupabase('createIPBCours', error);
 }
 
-export async function updateIPBCours(id: string, data: { code?: string; titre?: string; niveau?: string; prof?: string; desc?: string; actif?: boolean }) {
+export async function updateIPBCours(id: string, data: { code?: string; titre?: string; niveau?: string; prof?: string; desc?: string; modules?: number }) {
   const patch: Record<string, unknown> = {};
   if (data.code !== undefined) patch.code = data.code;
   if (data.titre !== undefined) patch.titre = data.titre;
-  if (data.niveau !== undefined) patch.niveau = data.niveau;
   if (data.prof !== undefined) patch.professeur = data.prof || null;
-  if (data.desc !== undefined) patch.description = data.desc || null;
-  if (data.actif !== undefined) patch.actif = data.actif;
+  if (data.modules !== undefined) patch.nombre_modules = data.modules;
+  if (data.niveau) patch.niveau = data.niveau;
+  if (data.desc) patch.description = data.desc;
   const { error } = await supabase.from('ipb_cours').update(patch).eq('id', id);
   if (error) failSupabase('updateIPBCours', error);
 }
