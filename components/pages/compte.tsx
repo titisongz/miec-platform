@@ -237,15 +237,10 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
 }) {
   if (role === 'visiteur') return <AuthScreen onLogin={onLogin} />;
   const etu = etudiantIpb;
-  const submitted = [
-    { ...DB.TEMOIGNAGES[0], statut: 'publie' },
-    { titre: 'Délivré de la peur', cat: 'Libération', date: 'il y a 3 jours', statut: 'attente' },
-  ];
-  const history = [
-    { type: 'enseignement', item: DB.ENSEIGNEMENTS[0], icon: 'book', accent: 'ens' as AccentKey, label: 'Enseignement', when: 'il y a 1 h' },
-    { type: 'annonce', item: DB.ANNONCES[1], icon: 'mega', accent: 'ann' as AccentKey, label: 'Annonce', when: 'hier' },
-    { type: 'sortie', item: DB.SORTIES[2], icon: 'compass', accent: 'eva' as AccentKey, label: 'Rapport', when: 'il y a 2 j' },
-  ];
+  // Données fictives retirées. À brancher sur les vraies contributions /
+  // l'historique de l'utilisateur (Supabase) ultérieurement.
+  const submitted: { titre?: string; date?: string; statut: string }[] = [];
+  const history: { type: string; item: unknown; icon: string; accent: AccentKey; label: string; when: string }[] = [];
   return (
     <div className="screen pagefade" style={accentStyle('slate')}>
       <div style={{ padding: '22px 20px 0' }}>
@@ -319,6 +314,7 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
         </div>
       )}
 
+      {submitted.length > 0 && (<>
       <div className="section-h" style={{ margin: '22px 16px 12px' }}><h2 style={{ fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><Icon n="quote" size={18} />Mes témoignages</h2></div>
       <div className="list" style={{ paddingTop: 0 }}>
         {submitted.map((t, i) => (
@@ -337,6 +333,7 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
           </Reveal>
         ))}
       </div>
+      </>)}
 
       <div className="section-h" style={{ margin: '22px 16px 12px' }}><h2 style={{ fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><Icon n="bell" size={18} />Notifications</h2></div>
       <div className="section" style={{ paddingTop: 0 }}>
@@ -358,6 +355,7 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
         </Reveal>
       </div>
 
+      {history.length > 0 && (<>
       <div className="section-h" style={{ margin: '22px 16px 12px' }}><h2 style={{ fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><Icon n="history" size={18} />Historique de consultation</h2></div>
       <div className="list" style={{ paddingTop: 0 }}>
         {history.map((h, i) => (
@@ -377,6 +375,7 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
           </Reveal>
         ))}
       </div>
+      </>)}
 
       <div className="section" style={{ paddingTop: 18 }}>
         <Reveal>

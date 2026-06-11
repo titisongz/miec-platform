@@ -8,11 +8,9 @@ import type { AccentKey, Enseignement, Annonce, Temoignage, Sortie } from '@/lib
 import DB from '@/lib/data';
 import { getActivityRecente } from '@/lib/queries';
 
-const MODMETA: Record<string, string> = {
-  enseignements: '6 séries', priere: '4 sujets actifs', temoignages: '128 témoignages',
-  evangelisation: 'Prochaine sortie sam.', annonces: '4 nouvelles', ipb: 'Inscriptions ouvertes',
-  ressources: '60+ fichiers', librairie: '12 livres',
-};
+// Métadonnées des tuiles : vidées tant que les vrais compteurs Supabase ne
+// sont pas branchés (évite d'afficher des chiffres fictifs).
+const MODMETA: Record<string, string> = {};
 
 export function Tile({ mkey, onNav, delay }: { mkey: string; onNav: (p: string) => void; delay: number }) {
   const m = DB.MODULES[mkey];
@@ -25,7 +23,7 @@ export function Tile({ mkey, onNav, delay }: { mkey: string; onNav: (p: string) 
         <span className="ti"><Icon n={m.icon} size={21} sw={1.9} /></span>
         <span>
           <span className="tname" style={{ display: 'block' }}>{m.label}</span>
-          <span className="tmeta">{MODMETA[mkey]}</span>
+          {MODMETA[mkey] && <span className="tmeta">{MODMETA[mkey]}</span>}
         </span>
       </button>
     </Reveal>
@@ -65,6 +63,7 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
   const greet = hour < 5 ? 'Bonne nuit' : hour < 12 ? 'Bonjour' : hour < 18 ? 'Bel après-midi' : 'Bonsoir';
   const name = role === 'visiteur' ? '' : (displayName ? ', ' + displayName : '');
   const e = activity.enseignement;
+  const hasActivity = !!(activity.annonce || activity.temoignage || activity.sortie || activity.ipb);
 
   return (
     <div className="screen pagefade" style={accentStyle('slate')}>
@@ -81,7 +80,8 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
         </Reveal>
       </div>
 
-      {/* featured enseignement */}
+      {/* featured enseignement — uniquement si un vrai enseignement existe */}
+      {e && (
       <div className="section" style={{ paddingTop: 14 }}>
         <Reveal>
           <button className="card tap" style={{ ...accentStyle('ens'), width: '100%', textAlign: 'left', overflow: 'hidden' }} onClick={() => onOpen('enseignement', e)}>
@@ -103,27 +103,41 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
           </button>
         </Reveal>
       </div>
+      )}
 
       <div className="section-h"><h2>Explorer</h2></div>
       <div className="tilegrid">
         {DB.HUB_ORDER.map((k, i) => <Tile key={k} mkey={k} onNav={onNav} delay={i * 40} />)}
       </div>
 
+      {/* « Cette semaine » — affichée seulement s'il existe de vraies données */}
+      {hasActivity && (
+      <>
       <div className="section-h"><h2>Cette semaine</h2></div>
       <div className="list" style={{ paddingBottom: 4 }}>
-        <ActivityCard accent="ann" icon="mega" kicker="Annonce" delay={0}
-          title={activity.annonce.titre} meta={activity.annonce.date}
-          thumb="affiche" onClick={() => onOpen('annonce', activity.annonce)} />
-        <ActivityCard accent="tem" icon="quote" kicker="Témoignage récent" delay={50}
-          title={activity.temoignage.titre} meta={activity.temoignage.auteur + ' · ' + activity.temoignage.date}
-          thumb={false} onClick={() => onOpen('temoignage', activity.temoignage)} />
-        <ActivityCard accent="eva" icon="compass" kicker="Prochaine sortie" delay={100}
-          title={activity.sortie.titre} meta={activity.sortie.date + ' · ' + activity.sortie.heure}
-          thumb={false} onClick={() => onOpen('sortie', activity.sortie)} />
-        <ActivityCard accent="ipb" icon="cap" kicker="IPB" delay={150}
-          title={activity.ipb.titre} meta={activity.ipb.date}
-          thumb={false} onClick={() => onNav('ipb')} />
+        {activity.annonce && (
+          <ActivityCard accent="ann" icon="mega" kicker="Annonce" delay={0}
+            title={activity.annonce.titre} meta={activity.annonce.date}
+            thumb="affiche" onClick={() => onOpen('annonce', activity.annonce)} />
+        )}
+        {activity.temoignage && (
+          <ActivityCard accent="tem" icon="quote" kicker="Témoignage récent" delay={50}
+            title={activity.temoignage.titre} meta={activity.temoignage.auteur + ' · ' + activity.temoignage.date}
+            thumb={false} onClick={() => onOpen('temoignage', activity.temoignage)} />
+        )}
+        {activity.sortie && (
+          <ActivityCard accent="eva" icon="compass" kicker="Prochaine sortie" delay={100}
+            title={activity.sortie.titre} meta={activity.sortie.date + ' · ' + activity.sortie.heure}
+            thumb={false} onClick={() => onOpen('sortie', activity.sortie)} />
+        )}
+        {activity.ipb && (
+          <ActivityCard accent="ipb" icon="cap" kicker="IPB" delay={150}
+            title={activity.ipb.titre} meta={activity.ipb.date}
+            thumb={false} onClick={() => onNav('ipb')} />
+        )}
       </div>
+      </>
+      )}
 
       {role === 'visiteur' && (
         <div className="section" style={{ paddingTop: 14 }}>

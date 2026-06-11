@@ -27,6 +27,9 @@ function TeachModal({ edit, series, onClose, onSave }: {
     type: edit?.type ?? 'text',
   });
   const [busy, setBusy] = useState(false);
+  // Série : choix dans la liste existante, ou saisie libre d'une nouvelle série.
+  // Démarre en mode libre s'il n'existe encore aucune série.
+  const [newSerie, setNewSerie] = useState(series.length === 0);
   const ok = f.titre && f.auteur;
 
   async function submit() {
@@ -59,15 +62,24 @@ function TeachModal({ edit, series, onClose, onSave }: {
           </Field>
         </div>
         <div className="a-frow">
-          <Field label="Série">
-            <Select value={f.serie} onChange={e => setF({ ...f, serie: e.target.value })}>
-              {series.map(s => <option key={s.id} value={s.titre}>{s.titre}</option>)}
-            </Select>
-          </Field>
+          <div>
+            <Field label="Série">
+              {newSerie
+                ? <Input value={f.serie} onChange={e => setF({ ...f, serie: e.target.value })} placeholder="Nom de la nouvelle série" />
+                : (
+                  <Select value={f.serie} onChange={e => setF({ ...f, serie: e.target.value })}>
+                    <option value="">— Sans série —</option>
+                    {series.map(s => <option key={s.id} value={s.titre}>{s.titre}</option>)}
+                  </Select>
+                )}
+            </Field>
+            <button type="button" onClick={() => setNewSerie(v => !v)}
+              style={{ marginTop: 7, fontSize: 12.5, fontWeight: 700, color: '#4C84B8', cursor: 'pointer' }}>
+              {newSerie ? '← Choisir une série existante' : '+ Nouvelle série'}
+            </button>
+          </div>
           <Field label="Thème">
-            <Select value={f.theme} onChange={e => setF({ ...f, theme: e.target.value })}>
-              {['Foi', 'Grâce', 'Prière', 'Doctrine', 'Famille', 'Mission'].map(t => <option key={t}>{t}</option>)}
-            </Select>
+            <Input value={f.theme} onChange={e => setF({ ...f, theme: e.target.value })} placeholder="Foi, Grâce, Mission…" />
           </Field>
         </div>
         <Field label="Texte du message">
@@ -102,13 +114,16 @@ export default function PageEnseignements() {
 
   async function save(f: FormData) {
     try {
-      const serie = series.find(s => s.titre === f.serie);
+      // Série : retrouve l'existante par titre, sinon en crée une nouvelle.
+      const existing = series.find(s => s.titre === f.serie);
+      let serieId = existing?.id;
+      if (!serieId && f.serie.trim()) serieId = await createSerie(f.serie.trim());
       if (f.id) {
-        await updateEnseignement(f.id, { titre: f.titre, auteur: f.auteur, date: f.date, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
+        await updateEnseignement(f.id, { titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serieId, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
         setItems(items.map(it => it.id === f.id ? { ...it, ...f, yt: f.yt || undefined } : it));
         pushToast('Enseignement mis à jour', 'ens');
       } else {
-        await createEnseignement({ titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serie?.id, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
+        await createEnseignement({ titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serieId, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
         const newItem: Enseignement = { id: 'tmp-' + Date.now(), serie: f.serie, titre: f.titre, auteur: f.auteur, date: f.date, duree: '—', type: f.yt ? 'video' : 'texte', yt: f.yt || undefined, theme: f.theme, n: 1, total: 1, excerpt: f.excerpt };
         setItems([newItem, ...items]);
         pushToast('Enseignement publié', 'ens');

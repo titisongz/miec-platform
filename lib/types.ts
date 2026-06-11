@@ -101,11 +101,11 @@ export interface DB {
   IPB_PROGRAMME: IPBProgramme[];
   IPB_COURS: IPBCours[];
   ACTIVITY: {
-    enseignement: Enseignement;
-    annonce: Annonce;
-    temoignage: Temoignage;
-    sortie: Sortie;
-    ipb: { titre: string; date: string };
+    enseignement: Enseignement | null;
+    annonce: Annonce | null;
+    temoignage: Temoignage | null;
+    sortie: Sortie | null;
+    ipb: { titre: string; date: string } | null;
   };
 }
 
