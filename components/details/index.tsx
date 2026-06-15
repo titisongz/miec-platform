@@ -414,7 +414,9 @@ export function DRessource({ item: r, back }: {
           : r.photo
             ? <PhotoStrip photos={[r.photo]} alt={r.titre} />
             : <Ph label="aperçu du fichier" style={{ width: '100%', height: 260, borderRadius: 14 }} />}
-        <button className="btn btn-primary btn-block" style={{ marginTop: 18 }}><Icon n="dl" size={18} />Télécharger</button>
+        <button className="btn btn-primary btn-block" style={{ marginTop: 18, opacity: r.fichier ? 1 : .5 }} disabled={!r.fichier}
+          onClick={() => r.fichier && window.open(r.fichier, '_blank', 'noopener,noreferrer')}>
+          <Icon n="dl" size={18} />Télécharger</button>
       </div>
     </div>
   );

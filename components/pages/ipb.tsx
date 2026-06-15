@@ -8,6 +8,14 @@ import type { FrictionConfig, IPBCours, IPBProgramme } from '@/lib/types';
 import DB from '@/lib/data';
 import { getIPBProgramme, getIPBCours, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
 
+// Icône d'un document selon son type/format.
+function docIcon(type: string): string {
+  const t = (type || '').toLowerCase();
+  if (t.includes('audio') || t.includes('mp3') || t.includes('wav') || t.includes('partition')) return 'music';
+  if (t.includes('video') || t.includes('mp4')) return 'play';
+  return 'filetext'; // pdf, texte, défaut
+}
+
 /* ---------- Course card (étudiant) ---------- */
 function CourseCard({ c, delay, onOpen }: { c: IPBCours; delay: number; onOpen: (t: string, i: unknown) => void }) {
   const [open, setOpen] = useState(false);
@@ -34,15 +42,15 @@ function CourseCard({ c, delay, onOpen }: { c: IPBCours; delay: number; onOpen: 
             <div className="eyebrow" style={{ margin: '13px 0 10px' }}>Documentation du cours</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {c.docs.map((d, i) => (
-                <button key={i} onClick={() => onOpen('doc', { ...d, course: c.titre })} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 11, background: 'var(--bg-soft)', textAlign: 'left', transition: 'background .18s' }}>
+                <button key={i} onClick={() => d.url ? window.open(d.url, '_blank', 'noopener,noreferrer') : onOpen('doc', { ...d, course: c.titre })} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 11, background: 'var(--bg-soft)', textAlign: 'left', transition: 'background .18s' }}>
                   <span style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--surface)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--c-i)', flex: '0 0 auto' }}>
-                    <Icon n="filetext" size={16} />
+                    <Icon n={docIcon(d.f)} size={16} />
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontWeight: 600, fontSize: 13.5, lineHeight: 1.3 }}>{d.t}</span>
                     <span className="t3" style={{ fontSize: 11.5 }}>{d.f}</span>
                   </span>
-                  <Icon n={d.f === 'Texte' ? 'cr' : 'dl'} size={17} style={{ color: 'var(--ink-3)' }} />
+                  <Icon n={d.url ? 'dl' : 'cr'} size={17} style={{ color: 'var(--ink-3)' }} />
                 </button>
               ))}
             </div>

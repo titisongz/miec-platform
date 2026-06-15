@@ -44,3 +44,30 @@ export async function uploadPhoto(file: File, folder: string): Promise<string> {
   const [url] = await uploadPhotos([file], folder);
   return url;
 }
+
+// ── Fichiers non-image (PDF, audio, vidéo) ──────────────────────────────────────
+export const MAX_FILE_MB = 10;
+// Extensions acceptées par défaut pour les documents/ressources.
+export const FILE_EXTS = ['pdf', 'mp3', 'wav', 'mp4'];
+
+// Valide un fichier (extension + taille). Renvoie un message d'erreur ou null.
+export function validateFile(file: File, exts: string[] = FILE_EXTS, maxMb = MAX_FILE_MB): string | null {
+  const ext = file.name.includes('.') ? (file.name.split('.').pop() ?? '').toLowerCase() : '';
+  if (!exts.includes(ext)) return `Format non supporté (${exts.map(e => '.' + e).join(', ')}).`;
+  if (file.size > maxMb * 1024 * 1024) return `« ${file.name} » dépasse ${maxMb} Mo.`;
+  return null;
+}
+
+// Téléverse un fichier quelconque dans folder/ et renvoie son URL publique.
+export async function uploadFile(file: File, folder: string): Promise<string> {
+  const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream',
+  });
+  if (error) {
+    console.error('[storage] upload fichier échec:', error.message);
+    throw error;
+  }
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}

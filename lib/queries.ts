@@ -251,6 +251,7 @@ export async function getRessources(categorie?: string): Promise<Ressource[]> {
       cat: r.categorie ?? '',
       date: fmtDate(r.created_at),
       photo: r.photo_url ?? undefined,
+      fichier: r.fichier_url ?? undefined,
     }));
   } catch {
     return DB.RESSOURCES;
@@ -405,7 +406,7 @@ export async function getIPBCours(): Promise<IPBCours[]> {
     // select('*') = résilient si niveau/description n'existent pas encore.
     const { data, error } = await supabase
       .from('ipb_cours')
-      .select('*, docs:ipb_documents(titre, type)')
+      .select('*, docs:ipb_documents(titre, type, fichier_url)')
       .order('code');
 
     if (error || !data?.length) return DB.IPB_COURS;
@@ -418,9 +419,10 @@ export async function getIPBCours(): Promise<IPBCours[]> {
       prog: 0,
       modules: c.nombre_modules ?? 0,
       fait: 0,
-      docs: ((c.docs as { titre: string; type?: string }[]) ?? []).map(d => ({
+      docs: ((c.docs as { titre: string; type?: string; fichier_url?: string }[]) ?? []).map(d => ({
         t: d.titre,
         f: d.type ?? '',
+        url: d.fichier_url ?? undefined,
       })),
       niveau: c.niveau ?? '',
       desc: c.description ?? '',
@@ -643,7 +645,7 @@ export async function searchRessources(query: string): Promise<Ressource[]> {
   try {
     const { data, error } = await supabase
       .from('ressources')
-      .select('id, titre, type, taille, categorie, created_at')
+      .select('id, titre, type, taille, categorie, created_at, fichier_url, photo_url')
       .or(ilikeOr(term, ['titre', 'categorie']))
       .order('created_at', { ascending: false })
       .limit(30);
@@ -658,6 +660,8 @@ export async function searchRessources(query: string): Promise<Ressource[]> {
       taille: r.taille ?? '',
       cat: r.categorie ?? '',
       date: fmtDate(r.created_at),
+      photo: r.photo_url ?? undefined,
+      fichier: r.fichier_url ?? undefined,
     }));
   } catch {
     return [];

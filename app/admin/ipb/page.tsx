@@ -3,12 +3,13 @@ import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getIPBCours, getIPBProgramme, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
-import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine } from '@/lib/admin-queries';
-import { uploadPhoto, uploadPhotos, validatePhotos, MAX_PHOTO_MB } from '@/lib/storage';
+import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine, getIPBDocuments, addIPBDocument, deleteIPBDocument } from '@/lib/admin-queries';
+import { uploadPhoto, uploadPhotos, uploadFile, validatePhotos, validateFile, MAX_PHOTO_MB } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import type { IPBCours, IPBProgramme } from '@/lib/types';
 
-type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string };
+type CoursDoc = { id?: string; titre: string; fichier_url?: string; type?: string; file?: File };
+type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string; docs: CoursDoc[]; docsDeleted: string[] };
 type Inscription = { id: string; nom: string; email: string; date: string; statut: string };
 
 function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () => void; onSave: (f: CoursForm) => void }) {
@@ -16,10 +17,40 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
     id: edit?.id, code: edit?.code ?? '', titre: edit?.titre ?? '',
     niveau: edit?.niveau || 'N1', prof: edit?.prof ?? '', desc: edit?.desc ?? '',
     modules: edit?.modules ? String(edit.modules) : '',
+    docs: [], docsDeleted: [],
   });
   const [busy, setBusy] = useState(false);
+  // Saisie d'un nouveau document (titre + fichier PDF).
+  const [docTitle, setDocTitle] = useState('');
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docErr, setDocErr] = useState('');
   const ok = f.code && f.titre;
+
+  // Chargement des documents existants (édition) — avec leur id pour la suppression.
+  useEffect(() => {
+    if (!edit?.id) return;
+    getIPBDocuments(edit.id).then(docs => setF(prev => ({ ...prev, docs })));
+  }, [edit?.id]);
+
+  function addDoc() {
+    if (!docTitle.trim() || !docFile) { setDocErr('Titre et fichier PDF requis.'); return; }
+    const e = validateFile(docFile, ['pdf']);
+    if (e) { setDocErr(e); return; }
+    setF(prev => ({ ...prev, docs: [...prev.docs, { titre: docTitle.trim(), file: docFile, type: 'pdf' }] }));
+    setDocTitle(''); setDocFile(null); setDocErr('');
+  }
+  function removeDoc(idx: number) {
+    setF(prev => {
+      const d = prev.docs[idx];
+      return {
+        ...prev,
+        docs: prev.docs.filter((_, i) => i !== idx),
+        docsDeleted: d.id ? [...prev.docsDeleted, d.id] : prev.docsDeleted,
+      };
+    });
+  }
   function submit() { if (!ok) return; setBusy(true); onSave(f); }
+
   return (
     <Modal accent="ipb" icon="cap" wide title={edit ? 'Modifier le cours' : 'Ajouter un cours'} onClose={onClose}
       footer={<><button className="a-btn a-btn-ghost" onClick={onClose}>Annuler</button><button className="a-btn a-btn-primary" disabled={!ok || busy} onClick={submit}>{busy ? <><Spinner />…</> : <><AIcon n="check" size={17} />{edit ? 'Enregistrer' : 'Créer'}</>}</button></>}>
@@ -37,6 +68,29 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
         <Field label="Professeur" icon="user" opt="optionnel"><Input value={f.prof} onChange={e => setF({ ...f, prof: e.target.value })} placeholder="Prof. Jean-Pierre Bokwe" /></Field>
         <Field label="Description" opt="optionnelle">
           <Textarea value={f.desc} onChange={e => setF({ ...f, desc: e.target.value })} rows={3} placeholder="Présentation et objectifs pédagogiques…" />
+        </Field>
+
+        <Field label="Documents du cours" opt="PDF" hint="Téléversés à l'enregistrement · 10 Mo max">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {f.docs.map((d, i) => (
+              <div key={d.id ?? 'new' + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 9, background: 'var(--bg-soft)' }}>
+                <AIcon n="filetext" size={16} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.titre}</span>
+                {!d.id && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ink-3)' }}>nouveau</span>}
+                <button type="button" className="a-iact del" onClick={() => removeDoc(i)}><AIcon n="trash" size={14} /></button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Input value={docTitle} onChange={e => setDocTitle(e.target.value)} placeholder="Titre du document" style={{ flex: 1 }} />
+              <label className="a-btn a-btn-ghost" style={{ cursor: 'pointer', flex: '0 0 auto' }}>
+                <AIcon n="upload" size={15} />{docFile ? 'Changer' : 'PDF'}
+                <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }} onChange={e => { setDocFile(e.target.files?.[0] ?? null); setDocErr(''); e.target.value = ''; }} />
+              </label>
+              <button type="button" className="a-btn a-btn-primary" style={aStyle('ipb')} onClick={addDoc}><AIcon n="plus" size={15} />Ajouter</button>
+            </div>
+            {docFile && <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>Fichier sélectionné : {docFile.name}</div>}
+            {docErr && <div style={{ color: '#dc2626', fontSize: 12.5, fontWeight: 600 }}>{docErr}</div>}
+          </div>
         </Field>
       </div>
     </Modal>
@@ -262,13 +316,24 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
     const modules = f.modules ? Number(f.modules) : undefined;
     const data = { code: f.code, titre: f.titre, niveau: f.niveau, prof: f.prof, desc: f.desc, modules };
     try {
+      // 1. Cours : créer (→ id) ou mettre à jour.
+      const coursId = f.id ? (await updateIPBCours(f.id, data), f.id) : await createIPBCours(data);
+
+      // 2. Documents : suppressions puis ajouts (upload des nouveaux PDF).
+      for (const id of f.docsDeleted) await deleteIPBDocument(id);
+      for (const d of f.docs) {
+        if (d.file) {
+          const url = await uploadFile(d.file, 'ipb/cours');
+          await addIPBDocument(coursId, d.titre, url);
+        }
+      }
+
+      // 3. Reflet local (la table n'affiche pas les documents → recharge inutile).
       if (f.id) {
-        await updateIPBCours(f.id, data);
         setCours(cours.map(c => c.id === f.id ? { ...c, code: f.code, titre: f.titre, prof: f.prof, niveau: f.niveau, desc: f.desc, modules: modules ?? c.modules } : c));
         pushToast('Cours mis à jour', 'ipb');
       } else {
-        await createIPBCours(data);
-        const n: IPBCours = { id: 'tmp-' + Date.now(), code: f.code, titre: f.titre, prof: f.prof, prog: 0, modules: modules ?? 0, fait: 0, docs: [], niveau: f.niveau, desc: f.desc };
+        const n: IPBCours = { id: coursId, code: f.code, titre: f.titre, prof: f.prof, prog: 0, modules: modules ?? 0, fait: 0, docs: [], niveau: f.niveau, desc: f.desc };
         setCours([n, ...cours]);
         pushToast('Cours créé', 'ipb');
       }

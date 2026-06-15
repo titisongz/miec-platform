@@ -260,21 +260,23 @@ export async function deletePriere(id: string) {
 
 // ── Ressources ────────────────────────────────────────────────────────────────
 
-export async function createRessource(data: { titre: string; type: string; cat: string; desc?: string; taille?: string; photo?: string }) {
+export async function createRessource(data: { titre: string; type: string; cat: string; desc?: string; taille?: string; photo?: string; fichier?: string }) {
   const { error } = await supabase.from('ressources').insert({
     titre: data.titre, type: data.type, categorie: data.cat,
     taille: data.taille || null, created_by: await authorId(),
     ...(data.desc ? { description: data.desc } : {}),
     ...(data.photo ? { photo_url: data.photo } : {}),
+    ...(data.fichier ? { fichier_url: data.fichier } : {}),
   });
   if (error) failSupabase('createRessource', error);
 }
 
-export async function updateRessource(id: string, data: { titre: string; type: string; cat: string; desc?: string; photo?: string }) {
+export async function updateRessource(id: string, data: { titre: string; type: string; cat: string; desc?: string; photo?: string; fichier?: string }) {
   const { error } = await supabase.from('ressources').update({
     titre: data.titre, type: data.type, categorie: data.cat,
     ...(data.desc ? { description: data.desc } : {}),
     ...(data.photo ? { photo_url: data.photo } : {}),
+    ...(data.fichier !== undefined ? { fichier_url: data.fichier || null } : {}),
   }).eq('id', id);
   if (error) failSupabase('updateRessource', error);
 }
@@ -359,14 +361,15 @@ export async function upsertRapportSortie(sortie_id: string, data: {
 
 // ── IPB — Cours admin ─────────────────────────────────────────────────────────
 
-export async function createIPBCours(data: { code: string; titre: string; niveau?: string; prof?: string; desc?: string; modules?: number }) {
-  const { error } = await supabase.from('ipb_cours').insert({
+export async function createIPBCours(data: { code: string; titre: string; niveau?: string; prof?: string; desc?: string; modules?: number }): Promise<string> {
+  const { data: row, error } = await supabase.from('ipb_cours').insert({
     code: data.code, titre: data.titre,
     professeur: data.prof || null, nombre_modules: data.modules ?? null,
     ...(data.niveau ? { niveau: data.niveau } : {}),
     ...(data.desc ? { description: data.desc } : {}),
-  });
+  }).select('id').single();
   if (error) failSupabase('createIPBCours', error);
+  return row.id;
 }
 
 export async function updateIPBCours(id: string, data: { code?: string; titre?: string; niveau?: string; prof?: string; desc?: string; modules?: number }) {
@@ -384,6 +387,35 @@ export async function updateIPBCours(id: string, data: { code?: string; titre?: 
 export async function deleteIPBCours(id: string) {
   const { error } = await supabase.from('ipb_cours').delete().eq('id', id);
   if (error) failSupabase('deleteIPBCours', error);
+}
+
+// ── IPB — Documents d'un cours ────────────────────────────────────────────────
+
+export type IPBDocument = { id: string; titre: string; fichier_url: string; type: string };
+
+export async function getIPBDocuments(cours_id: string): Promise<IPBDocument[]> {
+  const { data, error } = await supabase
+    .from('ipb_documents')
+    .select('id, titre, fichier_url, type, created_at')
+    .eq('cours_id', cours_id)
+    .order('created_at', { ascending: true });
+  if (error) { logSupabaseError('getIPBDocuments', error); return []; }
+  return (data ?? []).map(d => ({
+    id: d.id, titre: d.titre, fichier_url: d.fichier_url ?? '', type: d.type ?? 'pdf',
+  }));
+}
+
+export async function addIPBDocument(cours_id: string, titre: string, fichier_url: string): Promise<IPBDocument> {
+  const { data, error } = await supabase.from('ipb_documents')
+    .insert({ cours_id, titre, fichier_url, type: 'pdf' })
+    .select('id, titre, fichier_url, type').single();
+  if (error) failSupabase('addIPBDocument', error);
+  return { id: data.id, titre: data.titre, fichier_url: data.fichier_url ?? '', type: data.type ?? 'pdf' };
+}
+
+export async function deleteIPBDocument(id: string) {
+  const { error } = await supabase.from('ipb_documents').delete().eq('id', id);
+  if (error) failSupabase('deleteIPBDocument', error);
 }
 
 // ── IPB — Vitrine (contenu clé/valeur) ────────────────────────────────────────

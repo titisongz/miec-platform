@@ -4,18 +4,28 @@ import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getRessources } from '@/lib/queries';
 import { createRessource, updateRessource, deleteRessource } from '@/lib/admin-queries';
-import { uploadPhotos } from '@/lib/storage';
+import { uploadPhotos, uploadFile, validateFile, MAX_FILE_MB } from '@/lib/storage';
 import type { Ressource } from '@/lib/types';
 
-type FormData = { id?: string; titre: string; type: string; cat: string; desc: string; taille: string; photos: string[]; files: File[] };
+type FormData = { id?: string; titre: string; type: string; cat: string; desc: string; taille: string; photos: string[]; files: File[]; fichier: string; fichierFile: File | null };
 
 const RES_TYPES = [{ v: 'pdf', l: 'PDF' }, { v: 'audio', l: 'Audio' }, { v: 'partition', l: 'Partition' }, { v: 'plan', l: 'Plan de lecture' }, { v: 'video', l: 'Vidéo' }];
 function resIcon(t: string) { return t === 'audio' ? 'play' : t === 'plan' ? 'calendar' : t === 'video' ? 'play' : 'filetext'; }
 
 function ResModal({ edit, onClose, onSave }: { edit?: Ressource; onClose: () => void; onSave: (f: FormData) => void }) {
-  const [f, setF] = useState<FormData>({ id: edit?.id, titre: edit?.titre ?? '', type: edit?.type ?? 'pdf', cat: edit?.cat ?? 'Études', desc: '', taille: edit?.taille ?? '', photos: edit?.photo ? [edit.photo] : [], files: [] });
+  const [f, setF] = useState<FormData>({ id: edit?.id, titre: edit?.titre ?? '', type: edit?.type ?? 'pdf', cat: edit?.cat ?? 'Études', desc: '', taille: edit?.taille ?? '', photos: edit?.photo ? [edit.photo] : [], files: [], fichier: edit?.fichier ?? '', fichierFile: null });
   const [busy, setBusy] = useState(false);
+  const [fileErr, setFileErr] = useState('');
   const ok = f.titre;
+  // Nom affiché : nouveau fichier sélectionné, sinon nom dérivé de l'URL existante.
+  const fichierName = f.fichierFile ? f.fichierFile.name : (f.fichier ? decodeURIComponent(f.fichier.split('/').pop() ?? '') : '');
+  function pickFile(list: FileList | null) {
+    const file = list?.[0];
+    if (!file) return;
+    const e = validateFile(file, ['pdf', 'mp3', 'wav', 'mp4'], MAX_FILE_MB);
+    if (e) { setFileErr(e); return; }
+    setFileErr(''); setF(prev => ({ ...prev, fichierFile: file }));
+  }
   function submit() { if (!ok) return; setBusy(true); onSave(f); }
   return (
     <Modal accent="res" icon="folder" wide title={edit ? 'Modifier la ressource' : 'Nouvelle ressource'} onClose={onClose}
@@ -33,7 +43,22 @@ function ResModal({ edit, onClose, onSave }: { edit?: Ressource; onClose: () => 
         <Field label="Description" opt="optionnelle">
           <Textarea value={f.desc} onChange={e => setF({ ...f, desc: e.target.value })} rows={3} placeholder="À quoi sert cette ressource…" />
         </Field>
-        <Field label="Photo" opt="optionnelle">
+        <Field label="Fichier" opt="optionnel" hint={`PDF, audio (.mp3/.wav) ou vidéo (.mp4) · ${MAX_FILE_MB} Mo max`}>
+          {fichierName ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, background: 'var(--bg-soft)' }}>
+              <AIcon n={resIcon(f.type)} size={16} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fichierName}</span>
+              <button type="button" className="a-iact del" onClick={() => setF({ ...f, fichier: '', fichierFile: null })}><AIcon n="trash" size={14} /></button>
+            </div>
+          ) : (
+            <label className="a-btn a-btn-ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
+              <AIcon n="upload" size={15} />Choisir un fichier
+              <input type="file" accept=".pdf,.mp3,.wav,.mp4" style={{ display: 'none' }} onChange={e => { pickFile(e.target.files); e.target.value = ''; }} />
+            </label>
+          )}
+          {fileErr && <div style={{ color: '#dc2626', fontSize: 12.5, fontWeight: 600, marginTop: 6 }}>{fileErr}</div>}
+        </Field>
+        <Field label="Photo (aperçu)" opt="optionnelle">
           <MediaPicker max={1} urls={f.photos} files={f.files} onUrls={u => setF({ ...f, photos: u })} onFiles={x => setF({ ...f, files: x })} />
         </Field>
       </div>
@@ -54,13 +79,15 @@ export default function PageRessources() {
     try {
       const uploaded = f.files.length ? await uploadPhotos(f.files, 'ressources') : [];
       const photo = [...f.photos, ...uploaded][0];
+      // Fichier principal : nouveau fichier uploadé, sinon URL existante conservée.
+      const fichier = f.fichierFile ? await uploadFile(f.fichierFile, 'ressources') : f.fichier;
       if (f.id) {
-        await updateRessource(f.id, { titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, photo });
-        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, type: f.type, cat: f.cat, photo } : it));
+        await updateRessource(f.id, { titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, photo, fichier });
+        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, type: f.type, cat: f.cat, photo, fichier: fichier || undefined } : it));
         pushToast('Ressource mise à jour', 'res');
       } else {
-        await createRessource({ titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, taille: f.taille, photo });
-        const n: Ressource = { id: 'tmp-' + Date.now(), titre: f.titre, type: f.type, fmt: f.type.toUpperCase(), taille: '—', cat: f.cat, date: 'à l\'instant', photo };
+        await createRessource({ titre: f.titre, type: f.type, cat: f.cat, desc: f.desc, taille: f.taille, photo, fichier });
+        const n: Ressource = { id: 'tmp-' + Date.now(), titre: f.titre, type: f.type, fmt: f.type.toUpperCase(), taille: '—', cat: f.cat, date: 'à l\'instant', photo, fichier: fichier || undefined };
         setItems([n, ...items]);
         pushToast('Ressource ajoutée', 'res');
       }
