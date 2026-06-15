@@ -137,7 +137,7 @@ export async function getTemoignages(categorie?: string): Promise<Temoignage[]> 
       .from('temoignages')
       .select(`
         id, titre, categorie, anonyme, statut, contenu, created_at,
-        auteur:profiles(nom_complet)
+        auteur:profiles!temoignages_auteur_id_fkey(nom_complet)
       `)
       .eq('statut', 'publie')
       .order('created_at', { ascending: false });
@@ -199,7 +199,7 @@ export async function getPrieres(categorie?: string): Promise<Priere[]> {
       .from('prieres')
       .select(`
         id, sujet, categorie, anonyme, urgent, compteur_prie, details, created_at,
-        auteur:profiles(nom_complet)
+        auteur:profiles!prieres_auteur_id_fkey(nom_complet)
       `)
       .order('urgent', { ascending: false })
       .order('created_at', { ascending: false });
@@ -544,7 +544,7 @@ export async function searchTemoignages(query: string): Promise<Temoignage[]> {
       .from('temoignages')
       .select(`
         id, titre, categorie, anonyme, statut, contenu, created_at,
-        auteur:profiles(nom_complet)
+        auteur:profiles!temoignages_auteur_id_fkey(nom_complet)
       `)
       .eq('statut', 'publie')
       .or(ilikeOr(term, ['titre', 'contenu', 'categorie']))
@@ -728,7 +728,7 @@ async function searchPrieresHits(term: string): Promise<SearchHit[]> {
       .from('prieres')
       .select(`
         id, sujet, categorie, anonyme, urgent, compteur_prie, details, created_at,
-        auteur:profiles(nom_complet)
+        auteur:profiles!prieres_auteur_id_fkey(nom_complet)
       `)
       .or(ilikeOr(term, ['sujet', 'details']))
       .order('created_at', { ascending: false })

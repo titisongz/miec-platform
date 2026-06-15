@@ -196,7 +196,7 @@ export async function createSerie(titre: string): Promise<string> {
 export async function getPendingTemoignages() {
   const { data, error } = await supabase
     .from('temoignages')
-    .select(`id, titre, categorie, anonyme, contenu, created_at, auteur:profiles(nom_complet)`)
+    .select(`id, titre, categorie, anonyme, contenu, created_at, auteur:profiles!temoignages_auteur_id_fkey(nom_complet)`)
     .eq('statut', 'en_attente')
     .order('created_at', { ascending: false });
   if (error) failSupabase('getPendingTemoignages', error);

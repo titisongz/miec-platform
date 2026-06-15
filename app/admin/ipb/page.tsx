@@ -334,7 +334,7 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
         // email vit dans auth.users → on le récupère via la fonction profils_avec_email()
         const [{ data }, { data: profils }] = await Promise.all([
           supabase.from('ipb_inscriptions')
-            .select('id, created_at, statut, profile:profiles(id, nom_complet)')
+            .select('id, created_at, statut, profile:profiles!ipb_inscriptions_profile_id_fkey(id, nom_complet)')
             .order('created_at', { ascending: false }),
           supabase.rpc('profils_avec_email'),
         ]);
