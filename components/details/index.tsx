@@ -156,8 +156,8 @@ export function DAnnonce({ item: a, back, fav, onFav, onShare }: {
   );
 }
 
-/* ---------- carrousel bannière (détail sortie) ---------- */
-function SortieBanner({ photos, onOpen }: { photos: string[]; onOpen: (i: number) => void }) {
+/* ---------- carrousel bannière (réutilisé : détail sortie + vitrine IPB) ---------- */
+export function SortieBanner({ photos, onOpen }: { photos: string[]; onOpen: (i: number) => void }) {
   const [i, setI] = useState(0);
   const n = photos.length;
   const touchX = useRef<number | null>(null);

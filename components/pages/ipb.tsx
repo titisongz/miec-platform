@@ -1,7 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, ModuleHero, BootList, Segmented, Sheet, Spinner } from '@/components/ui';
+import { Reveal, ModuleHero, BootList, Segmented, Sheet, Spinner, Lightbox } from '@/components/ui';
+import { SortieBanner } from '@/components/details';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import type { FrictionConfig, IPBCours, IPBProgramme } from '@/lib/types';
 import DB from '@/lib/data';
@@ -98,38 +99,6 @@ function InscriptionForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ---------- Lightbox plein écran ---------- */
-// Overlay en position:absolute (et non fixed) : le cadre .phone a un
-// transform:scale(), donc `fixed` se calerait sur le cadre. `absolute inset:0`
-// se résout sur .phone-screen (comme le .scrim du projet) → couvre l'écran.
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <div onClick={onClose}
-      style={{
-        position: 'absolute', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.92)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 12, animation: 'lb-fade .25s var(--ease-out)',
-      }}>
-      <style>{'@keyframes lb-fade{from{opacity:0}to{opacity:1}}@keyframes lb-zoom{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}'}</style>
-      <button type="button" aria-label="Fermer" onClick={onClose}
-        style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top,0px) + 12px)', right: 12, width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 1, backdropFilter: 'blur(4px)' }}>
-        <Icon n="x" size={22} sw={2} />
-      </button>
-      {/* stopPropagation : cliquer l'image ne ferme pas (seul le fond ferme).
-          touch-action:pinch-zoom → zoom natif au pincement sur mobile. */}
-      <img src={src} alt="" onClick={e => e.stopPropagation()}
-        style={{ width: '100%', height: 'auto', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block', touchAction: 'pinch-zoom', animation: 'lb-zoom .3s var(--ease-out)' }} />
-    </div>
-  );
-}
-
 /* ---------- Volet vitrine ---------- */
 function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => void }) {
   const [programme, setProgramme] = useState<IPBProgramme[]>([]);
@@ -138,8 +107,8 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
   // Contenu vitrine éditable (Admin → IPB → Vitrine). Défauts = ancien contenu
   // codé en dur → aucun saut visuel ni mismatch d'hydratation au chargement.
   const [v, setV] = useState<Record<string, string>>(IPB_VITRINE_DEFAUT);
-  // Lightbox : URL de l'image affichée plein écran (null = fermée).
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  // Lightbox : index de la photo affichée plein écran (null = fermée).
+  const [lb, setLb] = useState<number | null>(null);
 
   useEffect(() => {
     getIPBProgramme().then(data => { setProgramme(data); setLoading(false); });
@@ -147,17 +116,21 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
   useEffect(() => { getIPBVitrine().then(setV); }, []);
 
   const niveaux = Array.from(new Set(programme.map(p => p.niveau)));
+  // Carrousel = bannière épinglée TOUJOURS en première position, puis la galerie
+  // (sans doublon si la bannière est elle-même une photo de la galerie).
   const banniere = v.banniere_url;
   const galerie = parseGalerie(v.photos_galerie);
+  const photos = banniere ? [banniere, ...galerie.filter(u => u !== banniere)] : galerie;
 
   return (
     <div className="slidein">
-      {/* Bannière épinglée — pleine largeur, en haut de la vitrine */}
-      {banniere && (
+      {/* Carrousel bannière (bannière + galerie fusionnées) — pleine largeur */}
+      {photos.length > 0 && (
         <div className="section" style={{ paddingTop: 14, paddingBottom: 0 }}>
           <Reveal>
-            <img src={banniere} alt="Bannière IPB" onClick={() => setLightbox(banniere)}
-              style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 16, boxShadow: 'var(--sh-2)', display: 'block', cursor: 'pointer' }} />
+            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--sh-2)' }}>
+              <SortieBanner photos={photos} onOpen={(idx) => setLb(idx)} />
+            </div>
           </Reveal>
         </div>
       )}
@@ -165,8 +138,8 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
       <div className="section" style={{ paddingTop: 14 }}>
         <Reveal>
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {/* Sans bannière épinglée : placeholder par défaut */}
-            {!banniere && (
+            {/* Aucune photo : placeholder par défaut */}
+            {photos.length === 0 && (
               <div style={{ width: '100%', height: 138, background: 'var(--c-t)', display: 'grid', placeItems: 'center', color: 'var(--c-i)' }}>
                 <Icon n="cap" size={48} sw={1.2} />
               </div>
@@ -189,22 +162,6 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
       </div>
 
       {/* Galerie photos — grille 2 colonnes */}
-      {galerie.length > 0 && (
-        <>
-          <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>En images</h2></div>
-          <div className="section" style={{ paddingTop: 0 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {galerie.map((u, i) => (
-                <Reveal key={i} delay={i * 40} style={{ display: 'block' }}>
-                  <img src={u} alt="" onClick={() => setLightbox(u)}
-                    style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 14, border: '1px solid var(--line)', display: 'block', cursor: 'pointer' }} />
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
       <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>Programme académique</h2></div>
       <div className="section" style={{ paddingTop: 0 }}>
         {loading ? <BootList n={3} /> : niveaux.map((niv, ni) => (
@@ -272,7 +229,7 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
       </div>
 
       {form && <InscriptionForm onClose={() => setForm(false)} />}
-      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {lb !== null && photos.length > 0 && <Lightbox photos={photos} start={lb} onClose={() => setLb(null)} />}
     </div>
   );
 }
