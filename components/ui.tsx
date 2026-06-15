@@ -36,9 +36,11 @@ export function Reveal({ children, delay = 0, className = '', style, ...rest }: 
 
 /* ---------- status bar ---------- */
 export function StatusBar() {
-  const [t, setT] = useState(() => fmt());
+  // État vide au départ : new Date() au rendu serveur ≠ client → hydration mismatch (React #418).
+  // L'heure est renseignée après le montage côté client.
+  const [t, setT] = useState('');
   function fmt() { const d = new Date(); return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); }
-  useEffect(() => { const i = setInterval(() => setT(fmt()), 20000); return () => clearInterval(i); }, []);
+  useEffect(() => { setT(fmt()); const i = setInterval(() => setT(fmt()), 20000); return () => clearInterval(i); }, []);
   return (
     <div className="statusbar">
       <span>{t}</span>

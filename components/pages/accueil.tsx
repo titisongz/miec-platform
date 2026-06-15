@@ -70,10 +70,14 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
 }) {
   const [activity, setActivity] = useState(DB.ACTIVITY);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  // new Date() ne doit pas servir au rendu initial : l'heure/le fuseau du serveur
+  // diffèrent du client → hydration mismatch (React #418). On le calcule après montage.
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => { getActivityRecente().then(setActivity); }, []);
   useEffect(() => { getModuleCounts().then(setCounts); }, []);
+  useEffect(() => { setNow(new Date()); }, []);
 
-  const hour = new Date().getHours();
+  const hour = now?.getHours() ?? 12;
   const greet = hour < 5 ? 'Bonne nuit' : hour < 12 ? 'Bonjour' : hour < 18 ? 'Bel après-midi' : 'Bonsoir';
   const name = role === 'visiteur' ? '' : (displayName ? ', ' + displayName : '');
   const e = activity.enseignement;
@@ -87,7 +91,7 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
         <Reveal>
           <div className="metaline" style={{ marginBottom: 6 }}>
             <Icon n="calendar" size={14} />
-            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {now ? now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : ' '}
           </div>
           <div className="h1" style={{ marginBottom: 4 }}>{greet}{name}.</div>
           <p className="lead" style={{ margin: 0 }}>« Que la grâce et la paix vous soient multipliées. » Voici la vie de la communauté aujourd&apos;hui.</p>

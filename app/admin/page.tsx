@@ -58,7 +58,8 @@ export default function PageDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState({ members: 0, students: 0, contenus: 0, prieres: 0, pendingTem: 0 });
   const [toasts, pushToast] = useToasts();
-  const hour = new Date().getHours();
+  // new Date() hors rendu serveur : l'heure du serveur ≠ client → hydration mismatch (React #418).
+  const [hour, setHour] = useState(12);
   const greet = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bel après-midi' : 'Bonsoir';
 
   // Module counts (static representation — replace with DB counts if needed)
@@ -66,6 +67,7 @@ export default function PageDashboard() {
   const maxMod = Math.max(...moduleCounts);
 
   useEffect(() => {
+    setHour(new Date().getHours());
     getAdminStats().then(setStats).catch(() => {});
   }, []);
 
