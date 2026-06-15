@@ -211,8 +211,8 @@ export function Lightbox({ photos, start = 0, onClose }: { photos: string[]; sta
     <div onClick={onClose} role="dialog" aria-modal="true"
       style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, animation: 'scrim-in .25s var(--ease) forwards' }}>
       <button type="button" onClick={onClose} aria-label="Fermer"
-        style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top,0px) + 12px)', right: 12, width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 1, backdropFilter: 'blur(4px)' }}>
-        <Icon n="x" size={22} />
+        style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top,0px) + 12px)', right: 12, width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,.55)', border: '1.5px solid rgba(255,255,255,.7)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 2, backdropFilter: 'blur(4px)', boxShadow: '0 2px 10px rgba(0,0,0,.4)' }}>
+        <Icon n="x" size={22} sw={2.4} />
       </button>
       {n > 1 && (
         <button type="button" aria-label="Précédent" onClick={e => { e.stopPropagation(); setI(p => (p - 1 + n) % n); }}

@@ -24,8 +24,8 @@ function PhotoStrip({ photos, alt = '' }: { photos?: string[]; alt?: string }) {
           style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.93)', display: 'grid', placeItems: 'center', padding: 16 }}>
           <img src={open} alt={alt} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
           <button onClick={() => setOpen(null)} aria-label="Fermer"
-            style={{ position: 'absolute', top: 14, right: 14, width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center' }}>
-            <Icon n="x" size={22} />
+            style={{ position: 'absolute', top: 14, right: 14, width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,.55)', border: '1.5px solid rgba(255,255,255,.7)', color: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 2px 10px rgba(0,0,0,.4)' }}>
+            <Icon n="x" size={22} sw={2.4} />
           </button>
         </div>
       )}
