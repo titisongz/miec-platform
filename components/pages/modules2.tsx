@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, SkeletonCard, Tag, Ph, EmptySearch, Spinner, hl, Lightbox } from '@/components/ui';
+import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, SkeletonCard, Tag, Ph, EmptySearch, Spinner, hl } from '@/components/ui';
 import { accentStyle, RES_ICON } from '@/lib/accent';
 import type { Ressource, Livre, Sortie } from '@/lib/types';
 import { getRessources, getLivres, getSorties, searchRessources, searchLivres, searchSorties } from '@/lib/queries';
@@ -109,7 +109,6 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
   const [all, setAll] = useState<Sortie[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [lightbox, setLightbox] = useState<string | null>(null);
 
   useEffect(() => {
     getSorties().then(data => { setAll(data); setLoading(false); });
@@ -118,21 +117,6 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
   const { items, searching } = useSupabaseSearch(q, all, searchSorties);
   const aVenir = items.filter(s => s.statut === 'a_venir');
   const passees = items.filter(s => s.statut === 'passee');
-
-  // Vignettes photos d'une sortie. stopPropagation : ouvrir le lightbox sans
-  // déclencher la navigation de la carte (qui est un <button>).
-  function renderThumbs(s: Sortie, style?: React.CSSProperties) {
-    if (!s.photos || s.photos.length === 0) return null;
-    return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, ...style }}>
-        {s.photos.map((u, k) => (
-          <img key={k} src={u} alt="" loading="lazy"
-            onClick={(e) => { e.stopPropagation(); setLightbox(u); }}
-            style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 10, cursor: 'zoom-in', display: 'block' }} />
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div className="screen pagefade" style={accentStyle('eva')}>
@@ -157,7 +141,6 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
                     <div className="metaline" style={{ fontSize: 12 }}><Icon n="clock" size={13} /><span>{s.heure}</span><span className="md" /><Icon n="users" size={13} /><span>{s.equipe} équipiers</span></div>
                   </div>
                 </div>
-                {renderThumbs(s, { padding: '0 15px 15px' })}
               </button>
             </Reveal>
           ))}
@@ -184,14 +167,11 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
                     </div>
                   ))}
                 </div>
-                {renderThumbs(s, { marginTop: 12 })}
               </button>
             </Reveal>
           ))}
         </div>
       )}
-
-      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }

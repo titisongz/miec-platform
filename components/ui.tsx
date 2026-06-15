@@ -189,16 +189,24 @@ export function Sheet({ onClose, children, center = false }: {
   );
 }
 
-/* ---------- lightbox plein écran ---------- */
+/* ---------- lightbox plein écran (multi-photos, navigable) ---------- */
 // position:absolute (et non fixed) : le cadre .phone porte un transform:scale(),
 // donc `fixed` se calerait dessus. `absolute inset:0` se résout sur .phone-screen
 // (comme le .scrim) → couvre exactement l'écran de l'app.
-export function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+// Navigation : flèches ← →, touches clavier ← → et Échap.
+export function Lightbox({ photos, start = 0, onClose }: { photos: string[]; start?: number; onClose: () => void }) {
+  const [i, setI] = useState(start);
+  const n = photos.length;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowRight') setI(p => (p + 1) % n);
+      else if (e.key === 'ArrowLeft') setI(p => (p - 1 + n) % n);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, n]);
+  if (n === 0) return null;
   return (
     <div onClick={onClose} role="dialog" aria-modal="true"
       style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, animation: 'scrim-in .25s var(--ease) forwards' }}>
@@ -206,27 +214,25 @@ export function Lightbox({ src, onClose }: { src: string; onClose: () => void })
         style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top,0px) + 12px)', right: 12, width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 1, backdropFilter: 'blur(4px)' }}>
         <Icon n="x" size={22} />
       </button>
+      {n > 1 && (
+        <button type="button" aria-label="Précédent" onClick={e => { e.stopPropagation(); setI(p => (p - 1 + n) % n); }}
+          style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 1, backdropFilter: 'blur(4px)' }}>
+          <Icon n="cl" size={24} />
+        </button>
+      )}
       {/* stopPropagation : cliquer l'image ne ferme pas. touch-action → zoom natif. */}
-      <img src={src} alt="" onClick={e => e.stopPropagation()}
+      <img src={photos[i]} alt="" onClick={e => e.stopPropagation()}
         style={{ width: '100%', height: 'auto', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block', touchAction: 'pinch-zoom', animation: 'pop .3s var(--ease-out)' }} />
+      {n > 1 && (
+        <button type="button" aria-label="Suivant" onClick={e => { e.stopPropagation(); setI(p => (p + 1) % n); }}
+          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 1, backdropFilter: 'blur(4px)' }}>
+          <Icon n="cr" size={24} />
+        </button>
+      )}
+      {n > 1 && (
+        <div style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom,0px) + 16px)', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 13, fontWeight: 700, letterSpacing: '.02em' }}>{i + 1} / {n}</div>
+      )}
     </div>
-  );
-}
-
-/* ---------- grille de photos + lightbox ---------- */
-export function PhotoGrid({ photos, cols = 2 }: { photos?: string[]; cols?: number }) {
-  const [open, setOpen] = useState<string | null>(null);
-  if (!photos || photos.length === 0) return null;
-  return (
-    <>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10 }}>
-        {photos.map((src, i) => (
-          <img key={i} src={src} alt="" loading="lazy" onClick={() => setOpen(src)}
-            style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 14, border: '1px solid var(--line)', display: 'block', cursor: 'zoom-in' }} />
-        ))}
-      </div>
-      {open && <Lightbox src={open} onClose={() => setOpen(null)} />}
-    </>
   );
 }
 

@@ -1,7 +1,7 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, Tag, Ph, PhotoGrid } from '@/components/ui';
+import { Reveal, Tag, Ph, Lightbox } from '@/components/ui';
 import { accentStyle, RES_ICON } from '@/lib/accent';
 import { getParticipation, toggleParticipation, getParticipantsCount } from '@/lib/queries';
 import type { Enseignement, Temoignage, Annonce, Sortie, Livre, Priere, Ressource, FrictionConfig } from '@/lib/types';
@@ -156,6 +156,52 @@ export function DAnnonce({ item: a, back, fav, onFav, onShare }: {
   );
 }
 
+/* ---------- carrousel bannière (détail sortie) ---------- */
+function SortieBanner({ photos, onOpen }: { photos: string[]; onOpen: (i: number) => void }) {
+  const [i, setI] = useState(0);
+  const n = photos.length;
+  const touchX = useRef<number | null>(null);
+
+  function onTouchStart(e: React.TouchEvent) { touchX.current = e.touches[0].clientX; }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    touchX.current = null;
+    // swipe gauche (dx<0) → photo suivante ; swipe droite → précédente.
+    if (Math.abs(dx) > 40) setI(p => (p + (dx < 0 ? 1 : -1) + n) % n);
+  }
+
+  return (
+    <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <img src={photos[i]} alt="" onClick={() => onOpen(i)}
+        style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block', cursor: 'zoom-in' }} />
+      {n > 1 && (
+        <>
+          {/* compteur 1 / N — bas droite */}
+          <div style={{ position: 'absolute', right: 10, bottom: 10, background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '3px 9px', borderRadius: 20, backdropFilter: 'blur(4px)' }}>{i + 1} / {n}</div>
+          {/* flèches (desktop) */}
+          <button type="button" aria-label="Photo précédente" onClick={() => setI(p => (p - 1 + n) % n)}
+            style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: '#fff', display: 'grid', placeItems: 'center', backdropFilter: 'blur(4px)' }}>
+            <Icon n="cl" size={20} />
+          </button>
+          <button type="button" aria-label="Photo suivante" onClick={() => setI(p => (p + 1) % n)}
+            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: '#fff', display: 'grid', placeItems: 'center', backdropFilter: 'blur(4px)' }}>
+            <Icon n="cr" size={20} />
+          </button>
+          {/* points de navigation — bas centre */}
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 11, display: 'flex', justifyContent: 'center', gap: 6 }}>
+            {photos.map((_, k) => (
+              <button key={k} type="button" aria-label={`Photo ${k + 1}`} onClick={() => setI(k)}
+                style={{ width: k === i ? 18 : 6, height: 6, borderRadius: 3, padding: 0, border: 'none', background: k === i ? '#fff' : 'rgba(255,255,255,.55)', transition: 'width .2s' }} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Sortie ---------- */
 export function DSortie({ item: s, back, onShare, role, profileId, onAuth }: {
   item: Sortie; back: () => void; onShare: () => void;
@@ -165,6 +211,8 @@ export function DSortie({ item: s, back, onShare, role, profileId, onAuth }: {
   const [participe, setParticipe] = useState(false);
   const [count, setCount] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [lb, setLb] = useState<number | null>(null);   // index photo ouverte en lightbox
+  const photos = s.photos ?? [];
 
   useEffect(() => {
     if (!s.id) return;
@@ -196,6 +244,9 @@ export function DSortie({ item: s, back, onShare, role, profileId, onAuth }: {
   return (
     <div className="screen slidein" style={{ ...accentStyle('eva'), paddingBottom: 40 }}>
       <DetailTop back={back} label={passee ? 'Rapport de sortie' : "Sortie d'évangélisation"} />
+      {photos.length > 0
+        ? <SortieBanner photos={photos} onOpen={(idx) => setLb(idx)} />
+        : <Ph label="Sortie d'évangélisation" style={{ width: '100%', height: 200 }} />}
       <div style={{ padding: '18px 20px 0' }}>
         <div style={{ display: 'flex', gap: 7, marginBottom: 13 }}>
           <Tag c="eva" icon="sparkle">Thème · {s.theme}</Tag>
@@ -221,12 +272,6 @@ export function DSortie({ item: s, back, onShare, role, profileId, onAuth }: {
         )}
         <div className="eyebrow" style={{ marginBottom: 9 }}>{passee ? 'Résumé' : 'Programme'}</div>
         <p className="muted" style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 20 }}>{s.full}</p>
-        {s.photos && s.photos.length > 0 && (
-          <>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>Photos</div>
-            <div style={{ marginBottom: 20 }}><PhotoGrid photos={s.photos} /></div>
-          </>
-        )}
         {!passee ? (
           <>
             <button className={'btn btn-block ' + (participe ? 'btn-soft' : 'btn-primary')} onClick={toggle} disabled={busy}>
@@ -240,6 +285,7 @@ export function DSortie({ item: s, back, onShare, role, profileId, onAuth }: {
           <button className="btn btn-soft btn-block" onClick={onShare}><Icon n="share" size={17} />Partager le rapport</button>
         )}
       </div>
+      {lb !== null && photos.length > 0 && <Lightbox photos={photos} start={lb} onClose={() => setLb(null)} />}
     </div>
   );
 }
