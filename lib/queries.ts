@@ -395,20 +395,34 @@ export async function getIPBCours(): Promise<IPBCours[]> {
 // exécuté (table absente / vide), et garantit un objet complet même si la base
 // ne renvoie qu'une partie des clés.
 export const IPB_VITRINE_DEFAUT: Record<string, string> = {
-  description:       "L'Institut de Pédagogie Biblique offre une formation théologique rigoureuse et accessible, au service de l'Église et de la mission.",
-  depuis:            '2009',
-  cursus:            '3 ans',
-  diplome:           'Certificat',
-  modalite:          'Présentiel + en ligne',
-  frais:             '75 000 FCFA',
-  frais_note:        'échelonnement possible',
-  date_inscriptions: '5 mai 2026',
-  date_cloture:      '15 août 2026',
-  date_rentree:      '14 sept. 2026',
+  description:       'Bâtir la vie de Christ dans les vases de terre',
+  depuis:            'Formation accélérée',
+  cursus:            '2 mois',
+  diplome:           'Attestation de formation',
+  modalite:          'Présentiel · Tous les samedis',
+  frais:             '10 000 FCFA',
+  frais_note:        'Paiement OM : 658 923 857',
+  date_inscriptions: '27 juin 2026',
+  date_cloture:      '29 août 2026',
+  date_rentree:      '27 juin 2026',
   condition_1:       'Être né de nouveau et recommandé par son église',
-  condition_2:       'Niveau minimum : classe de Terminale',
-  condition_3:       'Lettre de motivation et entretien',
+  condition_2:       'Cours tous les samedis de 09h à 11h30',
+  condition_3:       'Durée 2 mois — du 27 juin au 29 août 2026',
+  // Médias (clés ajoutées par supabase/update-ipb-vitrine.sql)
+  banniere_url:      '',
+  photos_galerie:    '[]',
 };
+
+/** Parse le JSON de `photos_galerie` en tableau d'URLs (tolérant aux valeurs invalides). */
+export function parseGalerie(json: string | undefined | null): string[] {
+  if (!json) return [];
+  try {
+    const arr: unknown = JSON.parse(json);
+    return Array.isArray(arr) ? arr.filter((u): u is string => typeof u === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Toutes les clés de la vitrine IPB sous forme d'objet { cle: valeur }. */
 export async function getIPBVitrine(): Promise<Record<string, string>> {

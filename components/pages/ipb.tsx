@@ -5,7 +5,7 @@ import { Reveal, ModuleHero, BootList, Segmented, Sheet, Spinner } from '@/compo
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import type { FrictionConfig, IPBCours, IPBProgramme } from '@/lib/types';
 import DB from '@/lib/data';
-import { getIPBProgramme, getIPBCours, getIPBVitrine, IPB_VITRINE_DEFAUT } from '@/lib/queries';
+import { getIPBProgramme, getIPBCours, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
 
 /* ---------- Course card (étudiant) ---------- */
 function CourseCard({ c, delay, onOpen }: { c: IPBCours; delay: number; onOpen: (t: string, i: unknown) => void }) {
@@ -113,17 +113,32 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
   useEffect(() => { getIPBVitrine().then(setV); }, []);
 
   const niveaux = Array.from(new Set(programme.map(p => p.niveau)));
+  const banniere = v.banniere_url;
+  const galerie = parseGalerie(v.photos_galerie);
 
   return (
     <div className="slidein">
+      {/* Bannière épinglée — pleine largeur, en haut de la vitrine */}
+      {banniere && (
+        <div className="section" style={{ paddingTop: 14, paddingBottom: 0 }}>
+          <Reveal>
+            <img src={banniere} alt="Bannière IPB"
+              style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 16, boxShadow: 'var(--sh-2)', display: 'block' }} />
+          </Reveal>
+        </div>
+      )}
+
       <div className="section" style={{ paddingTop: 14 }}>
         <Reveal>
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ width: '100%', height: 138, background: 'var(--c-t)', display: 'grid', placeItems: 'center', color: 'var(--c-i)' }}>
-              <Icon n="cap" size={48} sw={1.2} />
-            </div>
+            {/* Sans bannière épinglée : placeholder par défaut */}
+            {!banniere && (
+              <div style={{ width: '100%', height: 138, background: 'var(--c-t)', display: 'grid', placeItems: 'center', color: 'var(--c-i)' }}>
+                <Icon n="cap" size={48} sw={1.2} />
+              </div>
+            )}
             <div style={{ padding: 16 }}>
-              <div className="eyebrow" style={{ marginBottom: 8 }}><Icon n="cap" size={14} sw={2} />Depuis {v.depuis}</div>
+              <div className="eyebrow" style={{ marginBottom: 8 }}><Icon n="cap" size={14} sw={2} />{v.depuis}</div>
               <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: '-.02em', lineHeight: 1.2, marginBottom: 8 }}>Former des serviteurs enracinés dans la Parole</div>
               <p className="lead" style={{ margin: 0, fontSize: 14 }}>{v.description}</p>
               <div style={{ display: 'flex', gap: 9, marginTop: 16 }}>
@@ -138,6 +153,22 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
           </div>
         </Reveal>
       </div>
+
+      {/* Galerie photos — grille 2 colonnes */}
+      {galerie.length > 0 && (
+        <>
+          <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>En images</h2></div>
+          <div className="section" style={{ paddingTop: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {galerie.map((u, i) => (
+                <Reveal key={i} delay={i * 40} style={{ display: 'block' }}>
+                  <img src={u} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 14, border: '1px solid var(--line)', display: 'block' }} />
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>Programme académique</h2></div>
       <div className="section" style={{ paddingTop: 0 }}>

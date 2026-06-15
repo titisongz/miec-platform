@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
-import { getIPBCours, getIPBProgramme, getIPBVitrine, IPB_VITRINE_DEFAUT } from '@/lib/queries';
+import { getIPBCours, getIPBProgramme, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
 import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine } from '@/lib/admin-queries';
+import { uploadPhoto, uploadPhotos, validatePhotos, MAX_PHOTO_MB } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import type { IPBCours, IPBProgramme } from '@/lib/types';
 
@@ -42,31 +43,34 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
   );
 }
 
+// Galerie vitrine : maximum 6 photos.
+const GALERIE_MAX = 6;
+
 // Champs éditables de la vitrine, regroupés par section. `cle` correspond
 // exactement aux lignes de la table public.ipb_vitrine.
 const VITRINE_GROUPS: { titre: string; icon: string; fields: { cle: string; label: string; area?: boolean; hint?: string }[] }[] = [
   { titre: 'Présentation', icon: 'cap', fields: [
-    { cle: 'description', label: 'Description', area: true, hint: "Texte d'introduction affiché en haut de la vitrine" },
-    { cle: 'depuis', label: 'Année de création', hint: 'Affichée « Depuis … »' },
+    { cle: 'description', label: 'Description', area: true, hint: "Phrase d'accroche affichée en haut de la vitrine" },
+    { cle: 'depuis', label: "Mention d'en-tête", hint: 'Badge affiché en haut · ex. Formation accélérée' },
   ] },
   { titre: 'Chiffres clés', icon: 'chart', fields: [
-    { cle: 'cursus', label: 'Cursus', hint: 'Ex. 3 ans' },
-    { cle: 'diplome', label: 'Diplôme', hint: 'Ex. Certificat' },
-    { cle: 'modalite', label: 'Modalité', hint: 'Ex. Présentiel + en ligne' },
+    { cle: 'cursus', label: 'Cursus', hint: 'Ex. 2 mois' },
+    { cle: 'diplome', label: 'Diplôme', hint: 'Ex. Attestation de formation' },
+    { cle: 'modalite', label: 'Modalité', hint: 'Ex. Présentiel · Tous les samedis' },
   ] },
   { titre: 'Frais de scolarité', icon: 'shield', fields: [
-    { cle: 'frais', label: 'Montant annuel', hint: 'Ex. 75 000 FCFA' },
-    { cle: 'frais_note', label: 'Note', hint: 'Ex. échelonnement possible' },
+    { cle: 'frais', label: 'Montant', hint: 'Ex. 10 000 FCFA' },
+    { cle: 'frais_note', label: 'Note', hint: 'Ex. Paiement OM : 658 923 857' },
   ] },
   { titre: 'Dates clés', icon: 'calendar', fields: [
-    { cle: 'date_inscriptions', label: 'Ouverture des inscriptions', hint: 'Ex. 5 mai 2026' },
-    { cle: 'date_cloture', label: 'Clôture des candidatures', hint: 'Ex. 15 août 2026' },
-    { cle: 'date_rentree', label: 'Rentrée académique', hint: 'Ex. 14 sept. 2026' },
+    { cle: 'date_inscriptions', label: 'Ouverture des inscriptions', hint: 'Ex. 27 juin 2026' },
+    { cle: 'date_cloture', label: 'Clôture des candidatures', hint: 'Ex. 29 août 2026' },
+    { cle: 'date_rentree', label: 'Rentrée académique', hint: 'Ex. 27 juin 2026' },
   ] },
-  { titre: "Conditions d'admission", icon: 'check', fields: [
-    { cle: 'condition_1', label: 'Condition 1', area: true },
-    { cle: 'condition_2', label: 'Condition 2', area: true },
-    { cle: 'condition_3', label: 'Condition 3', area: true },
+  { titre: "Conditions & infos pratiques", icon: 'check', fields: [
+    { cle: 'condition_1', label: 'Ligne 1', area: true },
+    { cle: 'condition_2', label: 'Ligne 2', area: true },
+    { cle: 'condition_3', label: 'Ligne 3', area: true },
   ] },
 ];
 
@@ -76,22 +80,79 @@ function VitrineTab({ pushToast }: { pushToast: (m: string, a?: string) => void 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // Médias : URLs déjà enregistrées + fichiers en attente d'upload.
+  const [banniere, setBanniere] = useState('');
+  const [galerie, setGalerie] = useState<string[]>([]);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [galerieFiles, setGalerieFiles] = useState<File[]>([]);
+  const [mediaErr, setMediaErr] = useState('');
+
   useEffect(() => {
-    getIPBVitrine().then(data => { setV(data); setInitial(data); setLoading(false); }).catch(() => setLoading(false));
+    getIPBVitrine().then(data => {
+      setV(data); setInitial(data);
+      setBanniere(data.banniere_url || '');
+      setGalerie(parseGalerie(data.photos_galerie));
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const allFields = VITRINE_GROUPS.flatMap(g => g.fields);
-  const dirty = allFields.some(f => (v[f.cle] ?? '') !== (initial[f.cle] ?? ''));
+  const textDirty = allFields.some(f => (v[f.cle] ?? '') !== (initial[f.cle] ?? ''));
+  const mediaDirty =
+    !!bannerFile || galerieFiles.length > 0 ||
+    banniere !== (initial.banniere_url || '') ||
+    JSON.stringify(galerie) !== JSON.stringify(parseGalerie(initial.photos_galerie));
+  const dirty = textDirty || mediaDirty;
 
   function set(cle: string, val: string) { setV(prev => ({ ...prev, [cle]: val })); }
 
+  const totalGalerie = galerie.length + galerieFiles.length;
+
+  function pickBanner(list: FileList | null) {
+    const file = list?.[0];
+    if (!file) return;
+    const e = validatePhotos([file], 0, 1);
+    if (e) { setMediaErr(e); return; }
+    setMediaErr(''); setBannerFile(file);
+  }
+
+  function pickGalerie(list: FileList | null) {
+    if (!list || !list.length) return;
+    const picked = Array.from(list);
+    const e = validatePhotos(picked, totalGalerie, GALERIE_MAX);
+    if (e) { setMediaErr(e); return; }
+    setMediaErr(''); setGalerieFiles(prev => [...prev, ...picked]);
+  }
+
+  // Épingle une photo déjà enregistrée comme bannière (remplace un éventuel
+  // nouveau fichier bannière en attente).
+  function pin(url: string) { setBanniere(url); setBannerFile(null); }
+
   async function save() {
     setBusy(true);
-    // On n'envoie QUE les champs réellement modifiés.
-    const changed = allFields.filter(f => (v[f.cle] ?? '') !== (initial[f.cle] ?? ''));
     try {
-      await Promise.all(changed.map(f => updateIPBVitrine(f.cle, v[f.cle] ?? '')));
-      setInitial({ ...v });
+      // 1. Upload des nouveaux fichiers dans media/ipb/.
+      const uploadedBanner = bannerFile ? await uploadPhoto(bannerFile, 'ipb') : '';
+      const uploadedGalerie = galerieFiles.length ? await uploadPhotos(galerieFiles, 'ipb') : [];
+      const nextBanniere = uploadedBanner || banniere;
+      const nextGalerie = [...galerie, ...uploadedGalerie];
+
+      // 2. État cible complet (texte + médias).
+      const target: Record<string, string> = {
+        ...v,
+        banniere_url: nextBanniere,
+        photos_galerie: JSON.stringify(nextGalerie),
+      };
+
+      // 3. N'envoyer que les clés réellement modifiées.
+      const keys = [...allFields.map(f => f.cle), 'banniere_url', 'photos_galerie'];
+      const changed = keys.filter(k => (target[k] ?? '') !== (initial[k] ?? ''));
+      await Promise.all(changed.map(k => updateIPBVitrine(k, target[k] ?? '')));
+
+      // 4. Refléter l'état enregistré.
+      setV(target); setInitial(target);
+      setBanniere(nextBanniere); setGalerie(nextGalerie);
+      setBannerFile(null); setGalerieFiles([]);
       pushToast('Vitrine mise à jour', 'ipb');
     } catch { pushToast('Erreur', 'tem'); }
     setBusy(false);
@@ -99,10 +160,73 @@ function VitrineTab({ pushToast }: { pushToast: (m: string, a?: string) => void 
 
   if (loading) return <div style={{ display: 'grid', gap: 10 }}>{[1, 2, 3].map(i => <div key={i} className="a-sk" style={{ height: 120, borderRadius: 12 }} />)}</div>;
 
+  const bannerPreview = bannerFile ? URL.createObjectURL(bannerFile) : banniere;
+
   return (
     <div>
       <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 20 }}>Contenu affiché sur la page vitrine de l&apos;IPB dans l&apos;application mobile.</p>
       <div style={{ display: 'grid', gap: 16 }}>
+
+        {/* ── Bannière & Photos ── */}
+        <Panel accent="ipb" icon="image" title="Bannière & Photos">
+          <Field label="Bannière principale" hint="Épinglée en haut de la vitrine · 1 image">
+            {bannerPreview ? (
+              <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}>
+                <img src={bannerPreview} alt="" style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block' }} />
+                <button type="button" aria-label="Retirer la bannière" onClick={() => { setBannerFile(null); setBanniere(''); }}
+                  style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%', background: 'rgba(0,0,0,.6)', color: '#fff', display: 'grid', placeItems: 'center' }}>
+                  <AIcon n="trash" size={15} />
+                </button>
+              </div>
+            ) : (
+              <label className="a-btn a-btn-ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                <AIcon n="upload" size={16} />Choisir une image
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { pickBanner(e.target.files); e.target.value = ''; }} />
+              </label>
+            )}
+          </Field>
+
+          <Field label="Galerie photos" hint={`Jusqu'à ${GALERIE_MAX} photos · ${MAX_PHOTO_MB} Mo max · « Épingler » définit la bannière`}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              {galerie.map((u, i) => {
+                const epinglee = banniere === u;
+                return (
+                  <div key={'u' + i} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: epinglee ? '2px solid var(--c)' : '1px solid var(--line)' }}>
+                    <img src={u} alt="" style={{ width: '100%', height: 92, objectFit: 'cover', display: 'block' }} />
+                    <button type="button" aria-label="Retirer" onClick={() => setGalerie(galerie.filter((_, j) => j !== i))}
+                      style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,.6)', color: '#fff', display: 'grid', placeItems: 'center' }}>
+                      <AIcon n="x" size={12} sw={2.4} />
+                    </button>
+                    <button type="button" onClick={() => pin(u)}
+                      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '4px 0', fontSize: 10.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, background: epinglee ? 'var(--c)' : 'rgba(0,0,0,.55)', color: '#fff' }}>
+                      <AIcon n="pin" size={11} />{epinglee ? 'Bannière' : 'Épingler'}
+                    </button>
+                  </div>
+                );
+              })}
+              {galerieFiles.map((f, i) => (
+                <div key={'f' + i} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px dashed var(--line-2)' }}>
+                  <img src={URL.createObjectURL(f)} alt="" style={{ width: '100%', height: 92, objectFit: 'cover', display: 'block', opacity: .85 }} />
+                  <button type="button" aria-label="Retirer" onClick={() => setGalerieFiles(galerieFiles.filter((_, j) => j !== i))}
+                    style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,.6)', color: '#fff', display: 'grid', placeItems: 'center' }}>
+                    <AIcon n="x" size={12} sw={2.4} />
+                  </button>
+                  <span style={{ position: 'absolute', left: 4, bottom: 4, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: 'rgba(0,0,0,.6)', color: '#fff' }}>nouvelle</span>
+                </div>
+              ))}
+              {totalGalerie < GALERIE_MAX && (
+                <label style={{ height: 92, borderRadius: 10, border: '1.5px dashed var(--line-2)', display: 'grid', placeItems: 'center', color: 'var(--ink-3)', cursor: 'pointer' }}>
+                  <AIcon n="upload" size={18} />
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => { pickGalerie(e.target.files); e.target.value = ''; }} />
+                </label>
+              )}
+            </div>
+            {mediaErr && <div style={{ color: '#dc2626', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>{mediaErr}</div>}
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 6 }}>Les nouvelles photos sont mises en ligne à l&apos;enregistrement.</div>
+          </Field>
+        </Panel>
+
+        {/* ── Champs texte ── */}
         {VITRINE_GROUPS.map(g => (
           <Panel key={g.titre} accent="ipb" icon={g.icon} title={g.titre}>
             <div className="a-form">

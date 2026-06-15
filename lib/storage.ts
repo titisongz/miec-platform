@@ -9,9 +9,11 @@ const MAX_BYTES = MAX_PHOTO_MB * 1024 * 1024;
 const BUCKET = 'media';
 
 // Valide une sélection d'images. Renvoie un message d'erreur, ou null si OK.
-export function validatePhotos(files: File[], existingCount = 0): string | null {
+// `max` permet de surcharger la limite par défaut (ex. 1 pour une bannière,
+// 6 pour la galerie IPB) sans toucher au plafond global MAX_PHOTOS.
+export function validatePhotos(files: File[], existingCount = 0, max = MAX_PHOTOS): string | null {
   if (files.length === 0) return null;
-  if (files.length + existingCount > MAX_PHOTOS) return `Maximum ${MAX_PHOTOS} photos au total.`;
+  if (files.length + existingCount > max) return `Maximum ${max} photo${max > 1 ? 's' : ''} au total.`;
   for (const f of files) {
     if (!f.type.startsWith('image/')) return `« ${f.name} » n'est pas une image.`;
     if (f.size > MAX_BYTES) return `« ${f.name} » dépasse ${MAX_PHOTO_MB} Mo.`;
