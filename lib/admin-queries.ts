@@ -418,6 +418,20 @@ export async function deleteIPBDocument(id: string) {
   if (error) failSupabase('deleteIPBDocument', error);
 }
 
+// ── IPB — Traitement d'une inscription ────────────────────────────────────────
+// statut ∈ enum statut_inscription ('validee' | 'refusee'). À la validation, on
+// active etudiant_ipb sur le profil lié → accès aux cours en ligne.
+export async function setInscriptionStatut(id: string, statut: 'validee' | 'refusee', profile_id?: string) {
+  const { error } = await supabase
+    .from('ipb_inscriptions')
+    .update({ statut, treated_at: new Date().toISOString(), treated_by: await authorId() })
+    .eq('id', id);
+  if (error) failSupabase('setInscriptionStatut', error);
+  if (statut === 'validee' && profile_id) {
+    await setEtudiantIPB(profile_id, true);
+  }
+}
+
 // ── IPB — Vitrine (contenu clé/valeur) ────────────────────────────────────────
 
 // upsert sur la contrainte unique `cle` → fonctionne que la ligne existe déjà

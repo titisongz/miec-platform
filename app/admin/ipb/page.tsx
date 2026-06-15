@@ -3,14 +3,14 @@ import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getIPBCours, getIPBProgramme, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
-import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine, getIPBDocuments, addIPBDocument, deleteIPBDocument } from '@/lib/admin-queries';
+import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine, getIPBDocuments, addIPBDocument, deleteIPBDocument, setInscriptionStatut } from '@/lib/admin-queries';
 import { uploadPhoto, uploadPhotos, uploadFile, validatePhotos, validateFile, MAX_PHOTO_MB } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import type { IPBCours, IPBProgramme } from '@/lib/types';
 
 type CoursDoc = { id?: string; titre: string; fichier_url?: string; type?: string; file?: File };
 type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string; docs: CoursDoc[]; docsDeleted: string[] };
-type Inscription = { id: string; nom: string; email: string; date: string; statut: string };
+type Inscription = { id: string; nom: string; email: string; date: string; statut: string; profile_id?: string };
 
 function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () => void; onSave: (f: CoursForm) => void }) {
   const [f, setF] = useState<CoursForm>({
@@ -399,7 +399,7 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
         // email vit dans auth.users → on le récupère via la fonction profils_avec_email()
         const [{ data }, { data: profils }] = await Promise.all([
           supabase.from('ipb_inscriptions')
-            .select('id, created_at, statut, profile:profiles!ipb_inscriptions_profile_id_fkey(id, nom_complet)')
+            .select('id, created_at, statut, nom, email, profile:profiles!ipb_inscriptions_profile_id_fkey(id, nom_complet)')
             .order('created_at', { ascending: false }),
           supabase.rpc('profils_avec_email'),
         ]);
@@ -408,12 +408,14 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
         );
         if (data) setItems(data.map((r: Record<string, unknown>) => {
           const profile = r.profile as { id?: string; nom_complet?: string } | null;
+          // Membre connecté → infos du profil ; visiteur → infos saisies au formulaire.
           return {
             id: r.id as string,
-            nom: profile?.nom_complet ?? 'Inconnu',
-            email: profile?.id ? (emailById.get(profile.id) ?? '') : '',
+            nom: profile?.nom_complet ?? (r.nom as string) ?? 'Inconnu',
+            email: (profile?.id ? emailById.get(profile.id) : '') || (r.email as string) || '',
             date: new Date(r.created_at as string).toLocaleDateString('fr-FR'),
             statut: (r.statut as string) ?? 'en_attente',
+            profile_id: profile?.id,
           };
         }));
       } catch { /* ignore */ }
@@ -421,19 +423,21 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
     })();
   }, []);
 
-  async function updateStatut(id: string, statut: string) {
+  // statut ∈ enum statut_inscription ('validee' | 'refusee'). À la validation,
+  // setInscriptionStatut active etudiant_ipb=true sur le profil lié → accès aux cours.
+  async function updateStatut(ins: Inscription, statut: 'validee' | 'refusee') {
     try {
-      await supabase.from('ipb_inscriptions').update({ statut }).eq('id', id);
-      setItems(items.map(it => it.id === id ? { ...it, statut } : it));
-      pushToast(statut === 'accepte' ? 'Inscription acceptée' : 'Inscription refusée', 'ipb');
+      await setInscriptionStatut(ins.id, statut, ins.profile_id);
+      setItems(items.map(it => it.id === ins.id ? { ...it, statut } : it));
+      pushToast(statut === 'validee' ? 'Inscription validée — accès activé' : 'Inscription refusée', 'ipb');
     } catch { pushToast('Erreur', 'tem'); }
   }
 
   if (loading) return <div style={{ display: 'grid', gap: 10 }}>{[1,2,3].map(i => <div key={i} className="a-sk" style={{ height: 56, borderRadius: 10 }} />)}</div>;
   if (!items.length) return <Empty icon="cap" title="Aucune inscription" sub="Les demandes d'inscription apparaîtront ici." />;
 
-  const TONE: Record<string, 'amber' | 'green' | 'red'> = { en_attente: 'amber', accepte: 'green', refuse: 'red' };
-  const LABEL: Record<string, string> = { en_attente: 'En attente', accepte: 'Accepté', refuse: 'Refusé' };
+  const TONE: Record<string, 'amber' | 'green' | 'red'> = { en_attente: 'amber', validee: 'green', refusee: 'red' };
+  const LABEL: Record<string, string> = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
 
   return (
     <Panel accent="ipb" pad={false}>
@@ -449,8 +453,8 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
               <td style={{ width: 160 }}>
                 {ins.statut === 'en_attente' && (
                   <div className="a-tact">
-                    <button className="a-btn a-btn-ghost a-btn-sm" style={{ color: '#16a34a' }} onClick={() => updateStatut(ins.id, 'accepte')}><AIcon n="check" size={14} />Accepter</button>
-                    <button className="a-btn a-btn-danger a-btn-sm" onClick={() => updateStatut(ins.id, 'refuse')}><AIcon n="x" size={14} />Refuser</button>
+                    <button className="a-btn a-btn-ghost a-btn-sm" style={{ color: '#16a34a' }} onClick={() => updateStatut(ins, 'validee')}><AIcon n="check" size={14} />Valider</button>
+                    <button className="a-btn a-btn-danger a-btn-sm" onClick={() => updateStatut(ins, 'refusee')}><AIcon n="x" size={14} />Refuser</button>
                   </div>
                 )}
               </td>

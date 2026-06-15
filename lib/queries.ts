@@ -376,6 +376,23 @@ export async function toggleParticipation(sortie_id: string, profile_id: string)
   }
 }
 
+// ── IPB — Inscription (soumission publique) ───────────────────────────────────
+// RLS ipb_inscriptions : insert public (with check true). On lie profile_id quand
+// l'utilisateur est connecté → permet au responsable d'activer etudiant_ipb à la
+// validation.
+export async function createInscription(data: {
+  nom: string; email: string; tel: string; niveau: string; profile_id?: string;
+}): Promise<void> {
+  const { error } = await supabase.from('ipb_inscriptions').insert({
+    nom: data.nom,
+    email: data.email,
+    telephone: data.tel || null,
+    niveau_vise: data.niveau || null,
+    ...(data.profile_id ? { profile_id: data.profile_id } : {}),
+  });
+  if (error) throw error;
+}
+
 // ── IPB — Programme académique ────────────────────────────────────────────────
 
 export async function getIPBProgramme(): Promise<IPBProgramme[]> {

@@ -6,7 +6,7 @@ import { SortieBanner } from '@/components/details';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import type { FrictionConfig, IPBCours, IPBProgramme } from '@/lib/types';
 import DB from '@/lib/data';
-import { getIPBProgramme, getIPBCours, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
+import { getIPBProgramme, getIPBCours, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie, createInscription } from '@/lib/queries';
 
 // Icône d'un document selon son type/format.
 function docIcon(type: string): string {
@@ -62,11 +62,22 @@ function CourseCard({ c, delay, onOpen }: { c: IPBCours; delay: number; onOpen: 
 }
 
 /* ---------- Inscription form ---------- */
-function InscriptionForm({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(0);
+function InscriptionForm({ onClose, profileId }: { onClose: () => void; profileId?: string }) {
+  const [step, setStep] = useState(0);   // 0 = saisie, 1 = envoi, 2 = confirmation
   const [f, setF] = useState({ nom: '', email: '', tel: '', niveau: 'Année 1' });
+  const [err, setErr] = useState('');
   const ok = f.nom && f.email && f.tel;
-  function submit() { setStep(1); setTimeout(() => setStep(2), 1300); }
+  async function submit() {
+    if (!ok || step === 1) return;
+    setErr(''); setStep(1);
+    try {
+      await createInscription({ ...f, profile_id: profileId });
+      setStep(2);
+    } catch {
+      setErr('Échec de l\'envoi. Réessayez.');
+      setStep(0);
+    }
+  }
   return (
     <Sheet onClose={onClose}>
       {step === 2 ? (
@@ -98,6 +109,7 @@ function InscriptionForm({ onClose }: { onClose: () => void }) {
               <option>Année 1</option><option>Année 2</option><option>Année 3</option>
             </select>
           </label>
+          {err && <div style={{ color: '#dc2626', fontSize: 12.5, fontWeight: 600, marginBottom: 10 }}>{err}</div>}
           <button className="btn btn-primary btn-block" disabled={!ok || step === 1} style={{ opacity: ok ? 1 : .5 }} onClick={submit}>
             {step === 1 ? <><Spinner />Envoi…</> : <>Envoyer ma demande</>}
           </button>
@@ -108,7 +120,7 @@ function InscriptionForm({ onClose }: { onClose: () => void }) {
 }
 
 /* ---------- Volet vitrine ---------- */
-function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => void }) {
+function VoletVitrine({ onAuth, profileId }: { onAuth: (cfg: FrictionConfig | string) => void; profileId?: string }) {
   const [programme, setProgramme] = useState<IPBProgramme[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(false);
@@ -236,19 +248,21 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
         </Reveal>
       </div>
 
-      {form && <InscriptionForm onClose={() => setForm(false)} />}
+      {form && <InscriptionForm onClose={() => setForm(false)} profileId={profileId} />}
       {lb !== null && photos.length > 0 && <Lightbox photos={photos} start={lb} onClose={() => setLb(null)} />}
     </div>
   );
 }
 
 /* ---------- Volet cours ---------- */
-function VoletCours({ etudiantIpb, onAuth, onOpen }: {
-  etudiantIpb: boolean; onAuth: (cfg: FrictionConfig | string) => void; onOpen: (t: string, i: unknown) => void;
+function VoletCours({ etudiantIpb, profileId, onOpen }: {
+  etudiantIpb: boolean; profileId?: string; onOpen: (t: string, i: unknown) => void;
 }) {
   const [cours, setCours] = useState<IPBCours[]>(DB.IPB_COURS);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  // Ouverture du formulaire d'inscription (sheet) directement depuis ce volet.
+  const [isInscriptionOpen, setIsInscriptionOpen] = useState(false);
 
   useEffect(() => {
     getIPBCours().then(data => { setCours(data); setLoading(false); });
@@ -265,8 +279,7 @@ function VoletCours({ etudiantIpb, onAuth, onOpen }: {
               </div>
               <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 8 }}>Espace réservé aux étudiants</div>
               <p className="lead" style={{ margin: '0 auto 20px', maxWidth: 280 }}>Le volet Cours en ligne est accessible aux étudiants IPB. Inscrivez-vous à l&apos;école pour suivre vos modules et accéder à la documentation.</p>
-              <button className="btn btn-primary" style={{ margin: '0 auto' }}
-                onClick={() => onAuth({ ipb: true, title: 'Accès aux cours en ligne', benefit: "Ce volet est réservé aux étudiants de l'IPB. Inscrivez-vous à l'Institut pour accéder à votre parcours, vos modules et vos documents." })}>
+              <button className="btn btn-primary" style={{ margin: '0 auto' }} onClick={() => setIsInscriptionOpen(true)}>
                 <Icon n="cap" size={17} />M&apos;inscrire à l&apos;IPB
               </button>
             </div>
@@ -289,6 +302,7 @@ function VoletCours({ etudiantIpb, onAuth, onOpen }: {
             ))}
           </div>
         </div>
+        {isInscriptionOpen && <InscriptionForm onClose={() => setIsInscriptionOpen(false)} profileId={profileId} />}
       </div>
     );
   }
@@ -330,12 +344,13 @@ function VoletCours({ etudiantIpb, onAuth, onOpen }: {
 }
 
 /* ---------- Page IPB ---------- */
-export default function PageIPB({ etudiantIpb = false, onAuth, onOpen, ipbTab, setIpbTab }: {
+export default function PageIPB({ etudiantIpb = false, onAuth, onOpen, ipbTab, setIpbTab, profileId }: {
   etudiantIpb?: boolean;
   onAuth: (cfg: FrictionConfig | string) => void;
   onOpen: (t: string, i: unknown) => void;
   ipbTab: string;
   setIpbTab: (v: string) => void;
+  profileId?: string;
 }) {
   return (
     <div className="screen pagefade" style={accentStyle('ipb')}>
@@ -345,8 +360,8 @@ export default function PageIPB({ etudiantIpb = false, onAuth, onOpen, ipbTab, s
         active={ipbTab} onPick={setIpbTab}
       />
       {ipbTab === 'vitrine'
-        ? <VoletVitrine onAuth={onAuth} />
-        : <VoletCours etudiantIpb={etudiantIpb} onAuth={onAuth} onOpen={onOpen} />}
+        ? <VoletVitrine onAuth={onAuth} profileId={profileId} />
+        : <VoletCours etudiantIpb={etudiantIpb} profileId={profileId} onOpen={onOpen} />}
     </div>
   );
 }

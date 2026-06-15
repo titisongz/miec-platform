@@ -321,7 +321,7 @@ export default function App() {
       case 'librairie':     return <PageLibrairie onOpen={openDetail} />;
       case 'evangelisation':return <PageEvangelisation onOpen={openDetail} />;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      case 'ipb':           return <PageIPB etudiantIpb={etudiantIpb} onAuth={onAuth as any} onOpen={openDetail} ipbTab={ipbTab} setIpbTab={setIpbTab} />;
+      case 'ipb':           return <PageIPB etudiantIpb={etudiantIpb} onAuth={onAuth as any} onOpen={openDetail} ipbTab={ipbTab} setIpbTab={setIpbTab} profileId={profile?.id} />;
       case 'recherche':     return <PageRecherche onOpen={openDetail} onNav={nav} />;
       case 'compte':        return (
         <PageCompte
