@@ -384,6 +384,17 @@ export async function deleteIPBCours(id: string) {
   if (error) failSupabase('deleteIPBCours', error);
 }
 
+// ── IPB — Vitrine (contenu clé/valeur) ────────────────────────────────────────
+
+// upsert sur la contrainte unique `cle` → fonctionne que la ligne existe déjà
+// (script de seed exécuté) ou non (nouvelle clé / table fraîchement créée).
+export async function updateIPBVitrine(cle: string, valeur: string) {
+  const { error } = await supabase
+    .from('ipb_vitrine')
+    .upsert({ cle, valeur }, { onConflict: 'cle' });
+  if (error) failSupabase('updateIPBVitrine', error);
+}
+
 // ── Statistiques admin ────────────────────────────────────────────────────────
 
 export async function getAdminStats() {

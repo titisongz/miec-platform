@@ -388,6 +388,47 @@ export async function getIPBCours(): Promise<IPBCours[]> {
   }
 }
 
+// ── IPB — Vitrine (contenu éditable, modèle clé/valeur) ──────────────────────
+
+// Valeurs par défaut = contenu historiquement codé en dur sur la page vitrine.
+// Sert de repli tant que le script supabase/fix-ipb-vitrine.sql n'a pas été
+// exécuté (table absente / vide), et garantit un objet complet même si la base
+// ne renvoie qu'une partie des clés.
+export const IPB_VITRINE_DEFAUT: Record<string, string> = {
+  description:       "L'Institut de Pédagogie Biblique offre une formation théologique rigoureuse et accessible, au service de l'Église et de la mission.",
+  depuis:            '2009',
+  cursus:            '3 ans',
+  diplome:           'Certificat',
+  modalite:          'Présentiel + en ligne',
+  frais:             '75 000 FCFA',
+  frais_note:        'échelonnement possible',
+  date_inscriptions: '5 mai 2026',
+  date_cloture:      '15 août 2026',
+  date_rentree:      '14 sept. 2026',
+  condition_1:       'Être né de nouveau et recommandé par son église',
+  condition_2:       'Niveau minimum : classe de Terminale',
+  condition_3:       'Lettre de motivation et entretien',
+};
+
+/** Toutes les clés de la vitrine IPB sous forme d'objet { cle: valeur }. */
+export async function getIPBVitrine(): Promise<Record<string, string>> {
+  try {
+    const { data, error } = await supabase
+      .from('ipb_vitrine')
+      .select('cle, valeur');
+
+    if (error || !data?.length) return { ...IPB_VITRINE_DEFAUT };
+
+    const vitrine = { ...IPB_VITRINE_DEFAUT };
+    for (const row of data) {
+      if (row.valeur != null) vitrine[row.cle] = row.valeur;
+    }
+    return vitrine;
+  } catch {
+    return { ...IPB_VITRINE_DEFAUT };
+  }
+}
+
 // ── Favoris ───────────────────────────────────────────────────────────────────
 
 export async function getFavoris(profile_id: string): Promise<FavItem[]> {

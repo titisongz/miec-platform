@@ -1,9 +1,9 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Reveal, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
-import { getIPBCours, getIPBProgramme } from '@/lib/queries';
-import { createIPBCours, updateIPBCours, deleteIPBCours } from '@/lib/admin-queries';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { getIPBCours, getIPBProgramme, getIPBVitrine, IPB_VITRINE_DEFAUT } from '@/lib/queries';
+import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine } from '@/lib/admin-queries';
 import { supabase } from '@/lib/supabase';
 import type { IPBCours, IPBProgramme } from '@/lib/types';
 
@@ -42,38 +42,86 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
   );
 }
 
-type VitrineBlock = { id: string; titre: string; contenu: string };
+// Champs éditables de la vitrine, regroupés par section. `cle` correspond
+// exactement aux lignes de la table public.ipb_vitrine.
+const VITRINE_GROUPS: { titre: string; icon: string; fields: { cle: string; label: string; area?: boolean; hint?: string }[] }[] = [
+  { titre: 'Présentation', icon: 'cap', fields: [
+    { cle: 'description', label: 'Description', area: true, hint: "Texte d'introduction affiché en haut de la vitrine" },
+    { cle: 'depuis', label: 'Année de création', hint: 'Affichée « Depuis … »' },
+  ] },
+  { titre: 'Chiffres clés', icon: 'chart', fields: [
+    { cle: 'cursus', label: 'Cursus', hint: 'Ex. 3 ans' },
+    { cle: 'diplome', label: 'Diplôme', hint: 'Ex. Certificat' },
+    { cle: 'modalite', label: 'Modalité', hint: 'Ex. Présentiel + en ligne' },
+  ] },
+  { titre: 'Frais de scolarité', icon: 'shield', fields: [
+    { cle: 'frais', label: 'Montant annuel', hint: 'Ex. 75 000 FCFA' },
+    { cle: 'frais_note', label: 'Note', hint: 'Ex. échelonnement possible' },
+  ] },
+  { titre: 'Dates clés', icon: 'calendar', fields: [
+    { cle: 'date_inscriptions', label: 'Ouverture des inscriptions', hint: 'Ex. 5 mai 2026' },
+    { cle: 'date_cloture', label: 'Clôture des candidatures', hint: 'Ex. 15 août 2026' },
+    { cle: 'date_rentree', label: 'Rentrée académique', hint: 'Ex. 14 sept. 2026' },
+  ] },
+  { titre: "Conditions d'admission", icon: 'check', fields: [
+    { cle: 'condition_1', label: 'Condition 1', area: true },
+    { cle: 'condition_2', label: 'Condition 2', area: true },
+    { cle: 'condition_3', label: 'Condition 3', area: true },
+  ] },
+];
 
 function VitrineTab({ pushToast }: { pushToast: (m: string, a?: string) => void }) {
-  const [blocks] = useState<VitrineBlock[]>([
-    { id: 'mission', titre: 'Mission', contenu: "L'Institut Protestant de la Bible forme des hommes et femmes pour le ministère pastoral, la mission et le service de l'Église locale." },
-    { id: 'vision', titre: 'Vision', contenu: "Susciter une génération de serviteurs enracinés dans la Parole, équipés pour l'œuvre du ministère et rayonnants pour la gloire de Dieu." },
-    { id: 'admission', titre: 'Conditions d\'admission', contenu: "Être membre actif d'une église affiliée MIEC. Avoir une recommandation pastorale. Entretien de discernement vocationnel." },
-  ]);
-  const [editing, setEditing] = useState<VitrineBlock | null>(null);
+  const [v, setV] = useState<Record<string, string>>(IPB_VITRINE_DEFAUT);
+  const [initial, setInitial] = useState<Record<string, string>>(IPB_VITRINE_DEFAUT);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getIPBVitrine().then(data => { setV(data); setInitial(data); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const allFields = VITRINE_GROUPS.flatMap(g => g.fields);
+  const dirty = allFields.some(f => (v[f.cle] ?? '') !== (initial[f.cle] ?? ''));
+
+  function set(cle: string, val: string) { setV(prev => ({ ...prev, [cle]: val })); }
+
+  async function save() {
+    setBusy(true);
+    // On n'envoie QUE les champs réellement modifiés.
+    const changed = allFields.filter(f => (v[f.cle] ?? '') !== (initial[f.cle] ?? ''));
+    try {
+      await Promise.all(changed.map(f => updateIPBVitrine(f.cle, v[f.cle] ?? '')));
+      setInitial({ ...v });
+      pushToast('Vitrine mise à jour', 'ipb');
+    } catch { pushToast('Erreur', 'tem'); }
+    setBusy(false);
+  }
+
+  if (loading) return <div style={{ display: 'grid', gap: 10 }}>{[1, 2, 3].map(i => <div key={i} className="a-sk" style={{ height: 120, borderRadius: 12 }} />)}</div>;
 
   return (
     <div>
-      <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 20 }}>Textes affichés sur la page vitrine de l'IPB dans l'application mobile.</p>
-      <div style={{ display: 'grid', gap: 14 }}>
-        {blocks.map((b, i) => (
-          <Reveal key={b.id} delay={i * 60} className="a-card" style={{ ...aStyle('ipb'), padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c-i)', background: 'var(--c-t)', display: 'inline-flex', padding: '2px 10px', borderRadius: 6, marginBottom: 8 }}>{b.titre}</div>
-                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--ink)' }}>{b.contenu}</p>
-              </div>
-              <button className="a-iact" onClick={() => setEditing(b)}><AIcon n="pen" size={16} /></button>
+      <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 20 }}>Contenu affiché sur la page vitrine de l&apos;IPB dans l&apos;application mobile.</p>
+      <div style={{ display: 'grid', gap: 16 }}>
+        {VITRINE_GROUPS.map(g => (
+          <Panel key={g.titre} accent="ipb" icon={g.icon} title={g.titre}>
+            <div className="a-form">
+              {g.fields.map(f => (
+                <Field key={f.cle} label={f.label} hint={f.hint}>
+                  {f.area
+                    ? <Textarea value={v[f.cle] ?? ''} onChange={e => set(f.cle, e.target.value)} rows={2} />
+                    : <Input value={v[f.cle] ?? ''} onChange={e => set(f.cle, e.target.value)} />}
+                </Field>
+              ))}
             </div>
-          </Reveal>
+          </Panel>
         ))}
       </div>
-      {editing && (
-        <Modal accent="ipb" icon="pen" title={`Modifier — ${editing.titre}`} onClose={() => setEditing(null)}
-          footer={<><button className="a-btn a-btn-ghost" onClick={() => setEditing(null)}>Annuler</button><button className="a-btn a-btn-primary" onClick={() => { pushToast('Texte enregistré (démo)', 'ipb'); setEditing(null); }}><AIcon n="check" size={17} />Enregistrer</button></>}>
-          <Textarea value={editing.contenu} onChange={e => setEditing({ ...editing, contenu: e.target.value })} rows={5} />
-        </Modal>
-      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+        <button className="a-btn a-btn-primary" style={aStyle('ipb')} disabled={!dirty || busy} onClick={save}>
+          {busy ? <><Spinner />…</> : <><AIcon n="check" size={16} />Enregistrer les modifications</>}
+        </button>
+      </div>
     </div>
   );
 }

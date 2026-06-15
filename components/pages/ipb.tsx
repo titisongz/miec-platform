@@ -5,7 +5,7 @@ import { Reveal, ModuleHero, BootList, Segmented, Sheet, Spinner } from '@/compo
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import type { FrictionConfig, IPBCours, IPBProgramme } from '@/lib/types';
 import DB from '@/lib/data';
-import { getIPBProgramme, getIPBCours } from '@/lib/queries';
+import { getIPBProgramme, getIPBCours, getIPBVitrine, IPB_VITRINE_DEFAUT } from '@/lib/queries';
 
 /* ---------- Course card (étudiant) ---------- */
 function CourseCard({ c, delay, onOpen }: { c: IPBCours; delay: number; onOpen: (t: string, i: unknown) => void }) {
@@ -103,10 +103,14 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
   const [programme, setProgramme] = useState<IPBProgramme[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(false);
+  // Contenu vitrine éditable (Admin → IPB → Vitrine). Défauts = ancien contenu
+  // codé en dur → aucun saut visuel ni mismatch d'hydratation au chargement.
+  const [v, setV] = useState<Record<string, string>>(IPB_VITRINE_DEFAUT);
 
   useEffect(() => {
     getIPBProgramme().then(data => { setProgramme(data); setLoading(false); });
   }, []);
+  useEffect(() => { getIPBVitrine().then(setV); }, []);
 
   const niveaux = Array.from(new Set(programme.map(p => p.niveau)));
 
@@ -119,11 +123,11 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
               <Icon n="cap" size={48} sw={1.2} />
             </div>
             <div style={{ padding: 16 }}>
-              <div className="eyebrow" style={{ marginBottom: 8 }}><Icon n="cap" size={14} sw={2} />Depuis 2009</div>
+              <div className="eyebrow" style={{ marginBottom: 8 }}><Icon n="cap" size={14} sw={2} />Depuis {v.depuis}</div>
               <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: '-.02em', lineHeight: 1.2, marginBottom: 8 }}>Former des serviteurs enracinés dans la Parole</div>
-              <p className="lead" style={{ margin: 0, fontSize: 14 }}>L&apos;Institut de Pédagogie Biblique offre une formation théologique rigoureuse et accessible, au service de l&apos;Église et de la mission.</p>
+              <p className="lead" style={{ margin: 0, fontSize: 14 }}>{v.description}</p>
               <div style={{ display: 'flex', gap: 9, marginTop: 16 }}>
-                {[['3 ans', 'Cursus'], ['Certificat', 'Diplôme'], ['Présentiel + en ligne', 'Modalité']].map((s, i) => (
+                {[[v.cursus, 'Cursus'], [v.diplome, 'Diplôme'], [v.modalite, 'Modalité']].map((s, i) => (
                   <div key={i} style={{ flex: 1, background: 'var(--c-t)', borderRadius: 12, padding: '11px 8px', textAlign: 'center' }}>
                     <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--c-i)', letterSpacing: '-.01em', lineHeight: 1.15 }}>{s[0]}</div>
                     <div className="t3" style={{ fontSize: 10.5, fontWeight: 600, marginTop: 3 }}>{s[1]}</div>
@@ -158,7 +162,7 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
         <Reveal>
           <div className="card" style={{ padding: 16, marginBottom: 12 }}>
             <div className="eyebrow" style={{ marginBottom: 12 }}><Icon n="calendar" size={14} sw={2} />Dates clés 2026–2027</div>
-            {[['Ouverture des inscriptions', '5 mai 2026'], ['Clôture des candidatures', '15 août 2026'], ['Rentrée académique', '14 sept. 2026']].map((d, i) => (
+            {[['Ouverture des inscriptions', v.date_inscriptions], ['Clôture des candidatures', v.date_cloture], ['Rentrée académique', v.date_rentree]].map((d, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < 2 ? '1px solid var(--line)' : 'none' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c)', flex: '0 0 auto' }} />
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{d[0]}</span>
@@ -171,7 +175,7 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
           <div className="card" style={{ padding: 16 }}>
             <div className="eyebrow" style={{ marginBottom: 12 }}><Icon n="check" size={14} sw={2} />Conditions & frais</div>
             <ul style={{ margin: '0 0 14px', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {["Être né de nouveau et recommandé par son église", "Niveau minimum : classe de Terminale", "Lettre de motivation et entretien"].map((t, i) => (
+              {[v.condition_1, v.condition_2, v.condition_3].map((t, i) => (
                 <li key={i} style={{ display: 'flex', gap: 9, fontSize: 13.5, lineHeight: 1.4 }}>
                   <Icon n="check" size={16} sw={2.2} style={{ color: 'var(--c-i)', flex: '0 0 auto', marginTop: 1 }} />
                   <span className="muted">{t}</span>
@@ -181,9 +185,9 @@ function VoletVitrine({ onAuth }: { onAuth: (cfg: FrictionConfig | string) => vo
             <div style={{ background: 'var(--c-t)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1 }}>
                 <div className="t3" style={{ fontSize: 11.5, fontWeight: 700 }}>Frais de scolarité annuels</div>
-                <div style={{ fontWeight: 800, fontSize: 19, color: 'var(--c-i)', letterSpacing: '-.02em' }}>75 000 FCFA</div>
+                <div style={{ fontWeight: 800, fontSize: 19, color: 'var(--c-i)', letterSpacing: '-.02em' }}>{v.frais}</div>
               </div>
-              <div className="t3" style={{ fontSize: 11, textAlign: 'right', lineHeight: 1.4 }}>échelonnement<br />possible</div>
+              <div className="t3" style={{ fontSize: 11, textAlign: 'right', lineHeight: 1.4 }}>{v.frais_note}</div>
             </div>
           </div>
         </Reveal>
