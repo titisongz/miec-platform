@@ -360,8 +360,11 @@ export function DPriere({ item: p, back, prayed, onPray }: {
 
 /* ---------- Document ---------- */
 export function DDoc({ item: d, back }: {
-  item: { t: string; f: string; course?: string }; back: () => void;
+  item: { t: string; f: string; course?: string; url?: string; fichier_url?: string }; back: () => void;
 }) {
+  console.log('[DDoc] item complet =', d); // temporaire : diagnostic ouverture document
+  const href = d.fichier_url ?? d.url;
+  const open = () => { if (href) window.open(href, '_blank', 'noopener,noreferrer'); };
   return (
     <div className="screen slidein" style={{ ...accentStyle('ipb'), paddingBottom: 40 }}>
       <DetailTop back={back} label={d.course ?? 'Document'} />
@@ -377,9 +380,10 @@ export function DDoc({ item: d, back }: {
         </div>
         <Ph label="aperçu du document" style={{ width: '100%', height: 280, borderRadius: 14, marginBottom: 18 }} />
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-primary" style={{ flex: 1 }}><Icon n="book" size={17} />Consulter</button>
-          <button className="btn btn-soft" style={{ flex: 1 }}><Icon n="dl" size={17} />Télécharger</button>
+          <button className="btn btn-primary" style={{ flex: 1, opacity: href ? 1 : .5 }} disabled={!href} onClick={open}><Icon n="book" size={17} />Consulter</button>
+          <button className="btn btn-soft" style={{ flex: 1, opacity: href ? 1 : .5 }} disabled={!href} onClick={open}><Icon n="dl" size={17} />Télécharger</button>
         </div>
+        {!href && <div className="t3" style={{ fontSize: 12, marginTop: 12, textAlign: 'center' }}>Aucun fichier n&apos;est attaché à ce document.</div>}
       </div>
     </div>
   );
