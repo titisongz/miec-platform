@@ -67,7 +67,7 @@ export interface Ressource {
 
 export interface Livre {
   id: string; titre: string; auteur: string; annee: number;
-  pages: number; cat: string; desc: string; extrait: string; couverture?: string;
+  pages: number; cat: string; desc: string; extrait: string; couverture?: string; lien_acces?: string;
 }
 
 export interface Sortie {

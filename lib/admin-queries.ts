@@ -286,24 +286,26 @@ export async function deleteRessource(id: string) {
 
 // ── Livres ────────────────────────────────────────────────────────────────────
 
-export async function createLivre(data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string; couverture?: string }) {
+export async function createLivre(data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string; couverture?: string; lien?: string }) {
   const { error } = await supabase.from('livres').insert({
     titre: data.titre, auteur: data.auteur,
     annee: data.annee || null, pages: data.pages || null,
     categorie: data.cat, description: data.desc || null,
     extrait: data.extrait || null, couverture_url: data.couverture || null,
+    lien_acces: data.lien || null,
     created_by: await authorId(),
   });
   if (error) failSupabase('createLivre', error);
 }
 
-export async function updateLivre(id: string, data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string; couverture?: string }) {
+export async function updateLivre(id: string, data: { titre: string; auteur: string; annee?: number; pages?: number; cat: string; desc?: string; extrait?: string; couverture?: string; lien?: string }) {
   const { error } = await supabase.from('livres').update({
     titre: data.titre, auteur: data.auteur,
     annee: data.annee || null, pages: data.pages || null,
     categorie: data.cat, description: data.desc || null,
     extrait: data.extrait || null,
     ...(data.couverture !== undefined ? { couverture_url: data.couverture || null } : {}),
+    ...(data.lien !== undefined ? { lien_acces: data.lien || null } : {}),
   }).eq('id', id);
   if (error) failSupabase('updateLivre', error);
 }

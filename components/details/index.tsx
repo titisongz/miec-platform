@@ -313,7 +313,9 @@ export function DLivre({ item: b, back, fav, onFav }: {
         <div className="eyebrow" style={{ marginBottom: 10 }}>Extrait</div>
         <div style={{ fontFamily: 'Newsreader,serif', fontSize: 18, fontStyle: 'italic', lineHeight: 1.6, color: 'var(--ink)', padding: '18px 20px', background: 'var(--c-t)', borderRadius: 14, marginBottom: 22 }}>{b.extrait}</div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-primary" style={{ flex: 1 }}><Icon n="book" size={17} />Lire / Accéder</button>
+          {b.lien_acces
+            ? <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => b.lien_acces && window.open(b.lien_acces, '_blank', 'noopener,noreferrer')}><Icon n="book" size={17} />Lire / Accéder</button>
+            : <button className="btn btn-primary" style={{ flex: 1, opacity: .5 }} disabled><Icon n="book" size={17} />Non disponible</button>}
           <button className="btn btn-ghost" onClick={onFav} style={{ flex: '0 0 auto' }}>
             <Icon n="heart" size={18} fill={fav ? 'currentColor' : 'none'} style={{ color: fav ? 'var(--c)' : 'inherit' }} />
           </button>

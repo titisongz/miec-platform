@@ -7,13 +7,14 @@ import { createLivre, updateLivre, deleteLivre } from '@/lib/admin-queries';
 import { uploadPhotos } from '@/lib/storage';
 import type { Livre } from '@/lib/types';
 
-type FormData = { id?: string; titre: string; auteur: string; annee: string; pages: string; cat: string; desc: string; extrait: string; couverture: string[]; files: File[] };
+type FormData = { id?: string; titre: string; auteur: string; annee: string; pages: string; cat: string; desc: string; extrait: string; lien: string; couverture: string[]; files: File[] };
 
 function LivreModal({ edit, onClose, onSave }: { edit?: Livre; onClose: () => void; onSave: (f: FormData) => void }) {
   const [f, setF] = useState<FormData>({
     id: edit?.id, titre: edit?.titre ?? '', auteur: edit?.auteur ?? '',
     annee: edit?.annee ? String(edit.annee) : '', pages: edit?.pages ? String(edit.pages) : '',
     cat: edit?.cat ?? 'Théologie', desc: edit?.desc ?? '', extrait: edit?.extrait ?? '',
+    lien: edit?.lien_acces ?? '',
     couverture: edit?.couverture ? [edit.couverture] : [], files: [],
   });
   const [busy, setBusy] = useState(false);
@@ -43,6 +44,9 @@ function LivreModal({ edit, onClose, onSave }: { edit?: Livre; onClose: () => vo
         <Field label="Extrait" opt="optionnel">
           <Textarea value={f.extrait} onChange={e => setF({ ...f, extrait: e.target.value })} rows={4} placeholder="Premier paragraphe ou citation…" />
         </Field>
+        <Field label="Lien boutique digitale" icon="link" opt="optionnel" hint="Amazon, Selar, Gumroad, etc.">
+          <Input value={f.lien} onChange={e => setF({ ...f, lien: e.target.value })} placeholder="https://..." />
+        </Field>
       </div>
     </Modal>
   );
@@ -63,14 +67,14 @@ export default function PageLibrairie() {
     try {
       const uploaded = f.files.length ? await uploadPhotos(f.files, 'livres') : [];
       const couverture = [...f.couverture, ...uploaded][0];
-      const data = { titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture };
+      const data = { titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture, lien: f.lien };
       if (f.id) {
         await updateLivre(f.id, data);
-        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture } : it));
+        setItems(items.map(it => it.id === f.id ? { ...it, titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture, lien_acces: f.lien || undefined } : it));
         pushToast('Livre mis à jour', 'res');
       } else {
         await createLivre(data);
-        const n: Livre = { id: 'tmp-' + Date.now(), titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture };
+        const n: Livre = { id: 'tmp-' + Date.now(), titre: f.titre, auteur: f.auteur, annee, pages, cat: f.cat, desc: f.desc, extrait: f.extrait, couverture, lien_acces: f.lien || undefined };
         setItems([n, ...items]);
         pushToast('Livre ajouté', 'res');
       }

@@ -278,6 +278,7 @@ export async function getLivres(): Promise<Livre[]> {
       desc: l.description ?? '',
       extrait: l.extrait ?? '',
       couverture: l.couverture_url ?? undefined,
+      lien_acces: l.lien_acces ?? undefined,
     }));
   } catch {
     return DB.LIVRES;
@@ -669,7 +670,7 @@ export async function searchLivres(query: string): Promise<Livre[]> {
   try {
     const { data, error } = await supabase
       .from('livres')
-      .select('id, titre, auteur, annee, pages, categorie, description, extrait')
+      .select('id, titre, auteur, annee, pages, categorie, description, extrait, couverture_url, lien_acces')
       .or(ilikeOr(term, ['titre', 'auteur', 'description']))
       .order('created_at', { ascending: false })
       .limit(30);
@@ -685,6 +686,8 @@ export async function searchLivres(query: string): Promise<Livre[]> {
       cat: l.categorie ?? '',
       desc: l.description ?? '',
       extrait: l.extrait ?? '',
+      couverture: l.couverture_url ?? undefined,
+      lien_acces: l.lien_acces ?? undefined,
     }));
   } catch {
     return [];

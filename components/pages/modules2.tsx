@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Icon from '@/components/icons';
 import { Reveal, VerseBanner, VerseBlock, SearchBar, ChipRow, ModuleHero, BootList, SkeletonCard, Tag, Ph, EmptySearch, Spinner, hl } from '@/components/ui';
 import { accentStyle, RES_ICON } from '@/lib/accent';
@@ -83,7 +84,9 @@ export function PageLibrairie({ onOpen }: { onOpen: (t: string, i: unknown) => v
           {items.map((b, i) => (
             <Reveal key={b.id} delay={i * 55}>
               <button className="card tap" style={{ width: '100%', textAlign: 'left', padding: 15, display: 'flex', gap: 15 }} onClick={() => onOpen('livre', b)}>
-                <Ph label="couverture" style={{ width: 84, height: 118, flex: '0 0 auto', borderRadius: 10, boxShadow: 'var(--sh-2)' }} />
+                {b.couverture
+                  ? <Image src={b.couverture} alt={b.titre} width={84} height={118} style={{ flex: '0 0 auto', objectFit: 'cover', borderRadius: 10, boxShadow: 'var(--sh-2)' }} />
+                  : <Ph label="couverture" style={{ width: 84, height: 118, flex: '0 0 auto', borderRadius: 10, boxShadow: 'var(--sh-2)' }} />}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                   <Tag c="res">{b.cat}</Tag>
                   <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-.02em', lineHeight: 1.2, margin: '9px 0 4px' }}>{hl(b.titre, q)}</div>
