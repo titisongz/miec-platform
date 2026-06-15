@@ -189,6 +189,47 @@ export function Sheet({ onClose, children, center = false }: {
   );
 }
 
+/* ---------- lightbox plein écran ---------- */
+// position:absolute (et non fixed) : le cadre .phone porte un transform:scale(),
+// donc `fixed` se calerait dessus. `absolute inset:0` se résout sur .phone-screen
+// (comme le .scrim) → couvre exactement l'écran de l'app.
+export function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div onClick={onClose} role="dialog" aria-modal="true"
+      style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, animation: 'scrim-in .25s var(--ease) forwards' }}>
+      <button type="button" onClick={onClose} aria-label="Fermer"
+        style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top,0px) + 12px)', right: 12, width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,.16)', color: '#fff', display: 'grid', placeItems: 'center', zIndex: 1, backdropFilter: 'blur(4px)' }}>
+        <Icon n="x" size={22} />
+      </button>
+      {/* stopPropagation : cliquer l'image ne ferme pas. touch-action → zoom natif. */}
+      <img src={src} alt="" onClick={e => e.stopPropagation()}
+        style={{ width: '100%', height: 'auto', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block', touchAction: 'pinch-zoom', animation: 'pop .3s var(--ease-out)' }} />
+    </div>
+  );
+}
+
+/* ---------- grille de photos + lightbox ---------- */
+export function PhotoGrid({ photos, cols = 2 }: { photos?: string[]; cols?: number }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (!photos || photos.length === 0) return null;
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10 }}>
+        {photos.map((src, i) => (
+          <img key={i} src={src} alt="" loading="lazy" onClick={() => setOpen(src)}
+            style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 14, border: '1px solid var(--line)', display: 'block', cursor: 'zoom-in' }} />
+        ))}
+      </div>
+      {open && <Lightbox src={open} onClose={() => setOpen(null)} />}
+    </>
+  );
+}
+
 /* ---------- friction modal ---------- */
 export function FrictionModal({ config, onCreate, onContinue, onClose }: {
   config: FrictionConfig; onCreate: () => void; onContinue: () => void; onClose: () => void;

@@ -1,9 +1,10 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { Reveal, Tag, Ph } from '@/components/ui';
+import { Reveal, Tag, Ph, PhotoGrid } from '@/components/ui';
 import { accentStyle, RES_ICON } from '@/lib/accent';
-import type { Enseignement, Temoignage, Annonce, Sortie, Livre, Priere, Ressource } from '@/lib/types';
+import { getParticipation, toggleParticipation, getParticipantsCount } from '@/lib/queries';
+import type { Enseignement, Temoignage, Annonce, Sortie, Livre, Priere, Ressource, FrictionConfig } from '@/lib/types';
 
 /* ---------- galerie de photos (taille naturelle, ouverture au clic) ---------- */
 function PhotoStrip({ photos, alt = '' }: { photos?: string[]; alt?: string }) {
@@ -156,14 +157,45 @@ export function DAnnonce({ item: a, back, fav, onFav, onShare }: {
 }
 
 /* ---------- Sortie ---------- */
-export function DSortie({ item: s, back, onShare }: {
+export function DSortie({ item: s, back, onShare, role, profileId, onAuth }: {
   item: Sortie; back: () => void; onShare: () => void;
+  role: string; profileId?: string; onAuth: (cfg: FrictionConfig | string) => void;
 }) {
   const passee = s.statut === 'passee';
+  const [participe, setParticipe] = useState(false);
+  const [count, setCount] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!s.id) return;
+    getParticipantsCount(s.id).then(setCount);
+    if (profileId) getParticipation(s.id, profileId).then(setParticipe);
+    else setParticipe(false);
+  }, [s.id, profileId]);
+
+  async function toggle() {
+    // Visiteur (ou non connecté) → friction douce, pas d'écriture.
+    if (role === 'visiteur' || !profileId) {
+      onAuth({ title: 'Rejoindre cette sortie', benefit: "Connectez-vous pour vous inscrire à une sortie d'évangélisation et rejoindre l'équipe." });
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    const next = !participe;                              // mise à jour optimiste
+    setParticipe(next);
+    setCount(c => Math.max(0, c + (next ? 1 : -1)));
+    try {
+      await toggleParticipation(s.id, profileId);
+    } catch {
+      setParticipe(!next);                               // rollback en cas d'échec
+      setCount(c => Math.max(0, c + (next ? -1 : 1)));
+    }
+    setBusy(false);
+  }
+
   return (
     <div className="screen slidein" style={{ ...accentStyle('eva'), paddingBottom: 40 }}>
       <DetailTop back={back} label={passee ? 'Rapport de sortie' : "Sortie d'évangélisation"} />
-      <PhotoStrip photos={s.photos} alt={s.titre} />
       <div style={{ padding: '18px 20px 0' }}>
         <div style={{ display: 'flex', gap: 7, marginBottom: 13 }}>
           <Tag c="eva" icon="sparkle">Thème · {s.theme}</Tag>
@@ -189,9 +221,24 @@ export function DSortie({ item: s, back, onShare }: {
         )}
         <div className="eyebrow" style={{ marginBottom: 9 }}>{passee ? 'Résumé' : 'Programme'}</div>
         <p className="muted" style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 20 }}>{s.full}</p>
-        {!passee
-          ? <button className="btn btn-primary btn-block"><Icon n="check" size={18} />Je participe à cette sortie</button>
-          : <button className="btn btn-soft btn-block" onClick={onShare}><Icon n="share" size={17} />Partager le rapport</button>}
+        {s.photos && s.photos.length > 0 && (
+          <>
+            <div className="eyebrow" style={{ marginBottom: 9 }}>Photos</div>
+            <div style={{ marginBottom: 20 }}><PhotoGrid photos={s.photos} /></div>
+          </>
+        )}
+        {!passee ? (
+          <>
+            <button className={'btn btn-block ' + (participe ? 'btn-soft' : 'btn-primary')} onClick={toggle} disabled={busy}>
+              <Icon n="check" size={18} />{participe ? 'Je ne participe plus' : 'Je participe'}
+            </button>
+            <div className="t3" style={{ textAlign: 'center', fontSize: 12.5, marginTop: 10 }}>
+              {count > 0 ? `${count} participant${count > 1 ? 's' : ''}` : 'Soyez le premier à participer'}
+            </div>
+          </>
+        ) : (
+          <button className="btn btn-soft btn-block" onClick={onShare}><Icon n="share" size={17} />Partager le rapport</button>
+        )}
       </div>
     </div>
   );

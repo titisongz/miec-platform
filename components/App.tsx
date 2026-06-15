@@ -302,7 +302,7 @@ export default function App() {
       if (detailView.type === 'priere') return <DPriere item={item as any} back={back} prayed={prayed} onPray={pray} />;
       if (detailView.type === 'doc') return <DDoc item={item as any} back={back} />;
       if (detailView.type === 'ressource') return <DRessource item={item as any} back={back} />;
-      if (detailView.type === 'sortie') return <DSortie item={item as any} back={back} onShare={common.onShare} />;
+      if (detailView.type === 'sortie') return <DSortie item={item as any} back={back} onShare={common.onShare} role={role} profileId={profile?.id} onAuth={onAuth} />;
       const favProps = { fav: isFav(detailView.type, item), onFav: () => toggleFav(detailView.type!, item) };
       if (detailView.type === 'enseignement') return <DEnseignement item={item as any} back={back} onShare={common.onShare} {...favProps} />;
       if (detailView.type === 'temoignage') return <DTemoignage item={item as any} back={back} onShare={common.onShare} {...favProps} />;

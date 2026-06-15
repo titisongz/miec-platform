@@ -91,7 +91,7 @@ export default function PageEvangelisation() {
 
   async function saveSortie(f: SortieForm) {
     try {
-      const uploaded = f.files.length ? await uploadPhotos(f.files, 'sorties') : [];
+      const uploaded = f.files.length ? await uploadPhotos(f.files, 'evangelisation') : [];
       const photos = [...f.photos, ...uploaded];
       const data = { titre: f.titre, date: f.date, heure: f.heure, equipe: f.equipe ? Number(f.equipe) : undefined, theme: f.theme, programme: f.programme, photos };
       if (f.id) {

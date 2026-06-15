@@ -333,6 +333,47 @@ export async function getRapportSortie(sortie_id: string) {
   }
 }
 
+// ── Participations aux sorties ────────────────────────────────────────────────
+// Table participations_sorties créée par supabase/fix-participations-sorties.sql.
+
+/** Nombre de participants inscrits à une sortie. */
+export async function getParticipantsCount(sortie_id: string): Promise<number> {
+  try {
+    const { count } = await supabase
+      .from('participations_sorties')
+      .select('profile_id', { count: 'exact', head: true })
+      .eq('sortie_id', sortie_id);
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** L'utilisateur participe-t-il déjà à cette sortie ? */
+export async function getParticipation(sortie_id: string, profile_id: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('participations_sorties')
+      .select('profile_id')
+      .eq('sortie_id', sortie_id)
+      .eq('profile_id', profile_id)
+      .maybeSingle();
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
+/** Inscrit / désinscrit l'utilisateur de la sortie (selon l'état actuel en base). */
+export async function toggleParticipation(sortie_id: string, profile_id: string): Promise<void> {
+  const exists = await getParticipation(sortie_id, profile_id);
+  if (exists) {
+    await supabase.from('participations_sorties').delete().match({ sortie_id, profile_id });
+  } else {
+    await supabase.from('participations_sorties').insert({ sortie_id, profile_id });
+  }
+}
+
 // ── IPB — Programme académique ────────────────────────────────────────────────
 
 export async function getIPBProgramme(): Promise<IPBProgramme[]> {
@@ -657,7 +698,7 @@ export async function searchSorties(query: string): Promise<Sortie[]> {
     const { data, error } = await supabase
       .from('sorties')
       .select(`
-        id, titre, date, heure, statut, theme, programme,
+        id, titre, date, heure, statut, theme, programme, photos,
         rapports:rapports_sorties(taille_equipe, contacts, decisions)
       `)
       .or(ilikeOr(term, ['titre', 'theme', 'lieu']))
@@ -679,6 +720,7 @@ export async function searchSorties(query: string): Promise<Sortie[]> {
         contacts: rapport?.contacts ?? undefined,
         decisions: rapport?.decisions ?? undefined,
         full: s.programme ?? '',
+        photos: s.photos ?? [],
       };
     });
   } catch {
