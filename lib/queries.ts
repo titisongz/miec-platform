@@ -421,10 +421,13 @@ export async function getIPBProgramme(): Promise<IPBProgramme[]> {
 export async function getIPBCours(): Promise<IPBCours[]> {
   try {
     // select('*') = résilient si niveau/description n'existent pas encore.
+    // docs:ipb_documents(*) = join sur tous les champs des documents du cours.
     const { data, error } = await supabase
       .from('ipb_cours')
-      .select('*, docs:ipb_documents(titre, type, fichier_url)')
+      .select('*, docs:ipb_documents(*)')
       .order('code');
+
+    console.log('[getIPBCours] error =', error, '| data =', data); // temporaire : diagnostic documents IPB
 
     if (error || !data?.length) return DB.IPB_COURS;
 
