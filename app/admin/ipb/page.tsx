@@ -63,7 +63,20 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
   }
   // await onSave : si l'enregistrement échoue, le modal reste ouvert (la saisie
   // et le PDF sélectionné sont conservés) et le bouton se réactive.
-  async function submit() { if (!ok) return; setBusy(true); try { await onSave(f); } finally { setBusy(false); } }
+  async function submit() {
+    if (!ok) return;
+    // Rattache automatiquement un document saisi mais pas encore « Ajouté »
+    // (piège UX : choisir un PDF puis cliquer « Créer » sans cliquer « Ajouter »).
+    let docs = f.docs;
+    if (docFile) {
+      const e = validateFile(docFile, ['pdf']);
+      if (e) { setDocErr(e); return; }
+      const titre = docTitle.trim() || docFile.name.replace(/\.[^.]+$/, '');
+      docs = [...f.docs, { titre, file: docFile, type: 'pdf' }];
+    }
+    setBusy(true);
+    try { await onSave({ ...f, docs }); } finally { setBusy(false); }
+  }
 
   return (
     <Modal accent="ipb" icon="cap" wide title={edit ? 'Modifier le cours' : 'Ajouter un cours'} onClose={onClose}
