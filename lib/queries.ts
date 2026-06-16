@@ -427,8 +427,6 @@ export async function getIPBCours(): Promise<IPBCours[]> {
       .select('*, docs:ipb_documents(*)')
       .order('code');
 
-    console.log('[getIPBCours] error =', error, '| data =', data); // temporaire : diagnostic documents IPB
-
     if (error || !data?.length) return DB.IPB_COURS;
 
     return data.map(c => ({

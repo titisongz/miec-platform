@@ -344,28 +344,17 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
     const data = { code: f.code, titre: f.titre, niveau: f.niveau, prof: f.prof, desc: f.desc, modules };
     // Nouveaux documents à téléverser (ceux saisis dans le formulaire ont un File).
     const pendingDocs = f.docs.filter(d => d.file);
-    console.group('[CoursTab.save] enregistrement du cours');
-    console.log('cours (payload) =', data);
-    console.log('documents à ajouter (pendingDocs) =', pendingDocs.map(d => ({ titre: d.titre, fichier: d.file?.name, taille: d.file?.size })));
-    console.log('documents à supprimer (docsDeleted) =', f.docsDeleted);
     try {
       // 1. Cours : créer (→ id) ou mettre à jour. Chaque étape attend la précédente.
       const coursId = f.id ? (await updateIPBCours(f.id, data), f.id) : await createIPBCours(data);
-      console.log('id du cours (retour createIPBCours/édition) =', coursId);
       if (!coursId) throw new Error("Aucun id de cours retourné — impossible de lier les documents.");
 
       // 2. Documents : suppressions puis ajouts. Flux par document :
       //    upload du PDF vers media/ipb/cours/ → PUIS insert dans ipb_documents.
-      for (const id of f.docsDeleted) {
-        console.log('suppression document id =', id);
-        await deleteIPBDocument(id);
-      }
+      for (const id of f.docsDeleted) await deleteIPBDocument(id);
       for (const d of pendingDocs) {
-        console.log(`→ upload « ${d.titre} » (${d.file!.name}) vers media/ipb/cours/…`);
         const url = await uploadFile(d.file!, 'ipb/cours');
-        console.log('   fichier uploadé, url publique =', url);
-        const inserted = await addIPBDocument(coursId, d.titre, url);
-        console.log('   addIPBDocument OK, ligne insérée =', inserted);
+        await addIPBDocument(coursId, d.titre, url);
       }
 
       // 3. Reflet local (la table n'affiche pas les documents → recharge inutile).
@@ -377,10 +366,9 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
         setCours([n, ...cours]);
         pushToast('Cours créé', 'ipb');
       }
-      console.groupEnd();
     } catch (e) {
-      console.error('[CoursTab.save] échec à une étape:', e);
-      console.groupEnd();
+      // Affiche le message Supabase exact dans le toast.
+      console.error('[CoursTab.save] échec:', e);
       pushToast(`Erreur : ${errMessage(e)}`, 'tem');
       return; // garde le modal ouvert pour ne pas perdre la saisie
     }

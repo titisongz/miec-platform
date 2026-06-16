@@ -362,7 +362,6 @@ export function DPriere({ item: p, back, prayed, onPray }: {
 export function DDoc({ item: d, back }: {
   item: { t: string; f: string; course?: string; url?: string; fichier_url?: string }; back: () => void;
 }) {
-  console.log('[DDoc] item complet =', d); // temporaire : diagnostic ouverture document
   const href = d.fichier_url ?? d.url;
   const open = () => { if (href) window.open(href, '_blank', 'noopener,noreferrer'); };
   return (
