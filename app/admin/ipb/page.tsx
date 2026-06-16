@@ -12,7 +12,19 @@ type CoursDoc = { id?: string; titre: string; fichier_url?: string; type?: strin
 type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string; docs: CoursDoc[]; docsDeleted: string[] };
 type Inscription = { id: string; nom: string; email: string; date: string; statut: string; profile_id?: string };
 
-function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () => void; onSave: (f: CoursForm) => void }) {
+// Extrait un message lisible d'une erreur Supabase (PostgrestError / StorageError)
+// ou d'une Error standard, pour l'afficher tel quel dans un toast.
+function errMessage(e: unknown): string {
+  if (e && typeof e === 'object') {
+    const o = e as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [o.message, o.details, o.hint].filter(Boolean);
+    if (parts.length) return parts.join(' · ');
+    if (o.code) return `code ${o.code}`;
+  }
+  return String(e);
+}
+
+function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () => void; onSave: (f: CoursForm) => void | Promise<void> }) {
   const [f, setF] = useState<CoursForm>({
     id: edit?.id, code: edit?.code ?? '', titre: edit?.titre ?? '',
     niveau: edit?.niveau || 'N1', prof: edit?.prof ?? '', desc: edit?.desc ?? '',
@@ -49,7 +61,9 @@ function CoursModal({ edit, onClose, onSave }: { edit?: IPBCours; onClose: () =>
       };
     });
   }
-  function submit() { if (!ok) return; setBusy(true); onSave(f); }
+  // await onSave : si l'enregistrement échoue, le modal reste ouvert (la saisie
+  // et le PDF sélectionné sont conservés) et le bouton se réactive.
+  async function submit() { if (!ok) return; setBusy(true); try { await onSave(f); } finally { setBusy(false); } }
 
   return (
     <Modal accent="ipb" icon="cap" wide title={edit ? 'Modifier le cours' : 'Ajouter un cours'} onClose={onClose}
@@ -315,17 +329,30 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
   async function save(f: CoursForm) {
     const modules = f.modules ? Number(f.modules) : undefined;
     const data = { code: f.code, titre: f.titre, niveau: f.niveau, prof: f.prof, desc: f.desc, modules };
+    // Nouveaux documents à téléverser (ceux saisis dans le formulaire ont un File).
+    const pendingDocs = f.docs.filter(d => d.file);
+    console.group('[CoursTab.save] enregistrement du cours');
+    console.log('cours (payload) =', data);
+    console.log('documents à ajouter (pendingDocs) =', pendingDocs.map(d => ({ titre: d.titre, fichier: d.file?.name, taille: d.file?.size })));
+    console.log('documents à supprimer (docsDeleted) =', f.docsDeleted);
     try {
-      // 1. Cours : créer (→ id) ou mettre à jour.
+      // 1. Cours : créer (→ id) ou mettre à jour. Chaque étape attend la précédente.
       const coursId = f.id ? (await updateIPBCours(f.id, data), f.id) : await createIPBCours(data);
+      console.log('id du cours (retour createIPBCours/édition) =', coursId);
+      if (!coursId) throw new Error("Aucun id de cours retourné — impossible de lier les documents.");
 
-      // 2. Documents : suppressions puis ajouts (upload des nouveaux PDF).
-      for (const id of f.docsDeleted) await deleteIPBDocument(id);
-      for (const d of f.docs) {
-        if (d.file) {
-          const url = await uploadFile(d.file, 'ipb/cours');
-          await addIPBDocument(coursId, d.titre, url);
-        }
+      // 2. Documents : suppressions puis ajouts. Flux par document :
+      //    upload du PDF vers media/ipb/cours/ → PUIS insert dans ipb_documents.
+      for (const id of f.docsDeleted) {
+        console.log('suppression document id =', id);
+        await deleteIPBDocument(id);
+      }
+      for (const d of pendingDocs) {
+        console.log(`→ upload « ${d.titre} » (${d.file!.name}) vers media/ipb/cours/…`);
+        const url = await uploadFile(d.file!, 'ipb/cours');
+        console.log('   fichier uploadé, url publique =', url);
+        const inserted = await addIPBDocument(coursId, d.titre, url);
+        console.log('   addIPBDocument OK, ligne insérée =', inserted);
       }
 
       // 3. Reflet local (la table n'affiche pas les documents → recharge inutile).
@@ -337,7 +364,13 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
         setCours([n, ...cours]);
         pushToast('Cours créé', 'ipb');
       }
-    } catch { pushToast('Erreur', 'tem'); }
+      console.groupEnd();
+    } catch (e) {
+      console.error('[CoursTab.save] échec à une étape:', e);
+      console.groupEnd();
+      pushToast(`Erreur : ${errMessage(e)}`, 'tem');
+      return; // garde le modal ouvert pour ne pas perdre la saisie
+    }
     setModal(null);
   }
 
