@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState, ReactNode } from 'react';
 import Image from 'next/image';
 import Icon from './icons';
 import { accentStyle, ACCENT } from '@/lib/accent';
-import type { AccentKey, CSSVars, FrictionConfig, Verse } from '@/lib/types';
+import type { AccentKey, CSSVars, FrictionConfig, Verse, AppNotification } from '@/lib/types';
 import DB from '@/lib/data';
 import { getVerset } from '@/lib/queries';
 
@@ -61,8 +61,8 @@ export function StatusBar() {
 }
 
 /* ---------- app bar ---------- */
-export function AppBar({ role, initials = '', onSearch, onBell, onProfile }: {
-  role: string; initials?: string; onSearch: () => void; onBell: () => void; onProfile: () => void;
+export function AppBar({ role, initials = '', unread = 0, onSearch, onBell, onProfile }: {
+  role: string; initials?: string; unread?: number; onSearch: () => void; onBell: () => void; onProfile: () => void;
 }) {
   const member = role !== 'visiteur';
   return (
@@ -77,7 +77,12 @@ export function AppBar({ role, initials = '', onSearch, onBell, onProfile }: {
         <div style={{ flex: 1 }} />
         <button className="iconbtn" onClick={onSearch} aria-label="Rechercher"><Icon n="search" size={21} /></button>
         <button className="iconbtn" onClick={onBell} aria-label="Notifications">
-          <Icon n="bell" size={21} />{member && <span className="dot" />}
+          <Icon n="bell" size={21} />
+          {member && unread > 0 && (
+            <span style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 9, background: 'var(--m-tem)', color: '#fff', fontSize: 10, fontWeight: 800, lineHeight: '16px', textAlign: 'center', boxShadow: '0 0 0 2px var(--bg)' }}>
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
         </button>
         {member
           ? <button onClick={onProfile} className="avatar">{initials}</button>
@@ -186,6 +191,92 @@ export function Sheet({ onClose, children, center = false }: {
         {children}
       </div>
     </div>
+  );
+}
+
+/* ---------- centre de notifications ---------- */
+const NOTIF_MODULE: Record<string, { icon: string; accent: AccentKey }> = {
+  Enseignements:  { icon: 'book',    accent: 'ens' },
+  Témoignages:    { icon: 'quote',   accent: 'tem' },
+  Annonces:       { icon: 'mega',    accent: 'ann' },
+  Prière:         { icon: 'flame',   accent: 'pri' },
+  Ressources:     { icon: 'folder',  accent: 'res' },
+  Librairie:      { icon: 'books',   accent: 'ipb' },
+  Évangélisation: { icon: 'compass', accent: 'eva' },
+  IPB:            { icon: 'cap',     accent: 'ipb' },
+  Général:        { icon: 'bell',    accent: 'slate' },
+};
+function notifMeta(module: string) { return NOTIF_MODULE[module] ?? NOTIF_MODULE['Général']; }
+
+// Temps relatif court (« il y a 2 h »). Client-only : rendu uniquement à
+// l'ouverture de la cloche, donc pas de souci d'hydratation.
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `il y a ${d} j`;
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+export function NotificationCenter({ items, loading, onClose, onItem, onMarkAll }: {
+  items: AppNotification[]; loading: boolean; onClose: () => void;
+  onItem: (n: AppNotification) => void; onMarkAll: () => void;
+}) {
+  const unread = items.filter(n => !n.lu).length;
+  return (
+    <Sheet onClose={onClose}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--bg-soft)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+          <Icon n="bell" size={18} />
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-.01em' }}>Notifications</div>
+          <div className="t3" style={{ fontSize: 12, fontWeight: 600 }}>{unread > 0 ? `${unread} non lue${unread > 1 ? 's' : ''}` : 'Tout est à jour'}</div>
+        </div>
+        {unread > 0 && (
+          <button className="btn btn-soft btn-sm" onClick={onMarkAll} style={{ flex: '0 0 auto' }}>
+            <Icon n="check" size={15} sw={2.2} />Tout lire
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'grid', placeItems: 'center', padding: '40px 0' }}><Spinner /></div>
+      ) : items.length === 0 ? (
+        <div style={{ padding: '34px 18px', textAlign: 'center', color: 'var(--ink-3)' }}>
+          <Icon n="bell" size={26} style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Aucune notification</div>
+          <div style={{ fontSize: 12.5, marginTop: 3 }}>Vous serez prévenu ici des nouveautés.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 460, overflowY: 'auto', margin: '0 -4px', padding: '0 4px 4px' }}>
+          {items.map(n => {
+            const m = notifMeta(n.module);
+            return (
+              <button key={n.id} onClick={() => onItem(n)} style={{ ...accentStyle(m.accent), display: 'flex', gap: 12, alignItems: 'flex-start', textAlign: 'left', padding: '13px 13px', borderRadius: 14, background: n.lu ? 'var(--bg-soft)' : 'var(--c-t)', border: '1px solid var(--line)', transition: 'background .18s' }}>
+                <span style={{ width: 38, height: 38, borderRadius: 11, background: n.lu ? 'var(--surface)' : 'var(--c)', color: n.lu ? 'var(--c-i)' : '#fff', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                  <Icon n={m.icon} size={18} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ flex: 1, fontWeight: n.lu ? 600 : 800, fontSize: 14, lineHeight: 1.3 }}>{n.titre}</span>
+                    {!n.lu && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c)', flex: '0 0 auto' }} />}
+                  </span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.4, marginTop: 3 }}>{n.corps}</span>
+                  <span className="t3" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, marginTop: 6 }}>
+                    <span style={{ color: 'var(--c-i)' }}>{n.module || 'Général'}</span>·<span>{relTime(n.created_at)}</span>
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Sheet>
   );
 }
 

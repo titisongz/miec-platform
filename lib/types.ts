@@ -8,6 +8,19 @@ export interface UserProfile {
   nom_complet: string;
   role: 'membre' | 'responsable' | 'super_admin';
   etudiant_ipb: boolean;
+  notif_email?: boolean;
+  notif_whatsapp?: boolean;
+}
+
+// Notification diffusée (notifications_push) + statut lu/non-lu pour le membre courant.
+export interface AppNotification {
+  id: string;
+  titre: string;
+  corps: string;
+  module: string;
+  url?: string;
+  created_at: string;
+  lu: boolean;
 }
 export type PageKey =
   | 'accueil' | 'recherche' | 'priere' | 'compte'

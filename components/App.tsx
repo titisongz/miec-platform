@@ -1,10 +1,10 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import Icon from '@/components/icons';
-import { AppBar, FrictionModal, Sheet, Toggle, Spinner } from '@/components/ui';
+import { AppBar, FrictionModal, Sheet, Toggle, Spinner, NotificationCenter } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import { supabase } from '@/lib/supabase';
-import { addFavori, removeFavori } from '@/lib/queries';
+import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences } from '@/lib/queries';
 import PageAccueil from '@/components/pages/accueil';
 import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/components/pages/modules1';
 import { PageRessources, PageLibrairie, PageEvangelisation } from '@/components/pages/modules2';
@@ -14,7 +14,7 @@ import PageCompte from '@/components/pages/compte';
 import {
   DEnseignement, DTemoignage, DAnnonce, DSortie, DLivre, DPriere, DDoc, DRessource,
 } from '@/components/details';
-import type { AccentKey, Role, StackEntry, FavItem, FrictionConfig, UserProfile } from '@/lib/types';
+import type { AccentKey, Role, StackEntry, FavItem, FrictionConfig, UserProfile, AppNotification } from '@/lib/types';
 
 /* ---------- constants ---------- */
 const TYPEMAP: Record<string, { accent: AccentKey; icon: string; label: string; tf: string }> = {
@@ -138,6 +138,9 @@ export default function App() {
   const [favs, setFavs] = useState<FavItem[]>([]);
   const [prayed, setPrayed] = useState<string[]>([]);
   const [notif, setNotif] = useState({ email: true, whatsapp: false });
+  const [notifs, setNotifs] = useState<AppNotification[]>([]);
+  const [notifsLoading, setNotifsLoading] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [friction, setFriction] = useState<FrictionConfig | null>(null);
   const [submit, setSubmit] = useState<FrictionConfig | null>(null);
   const [toast, setToast] = useState<{ msg: string; accent: AccentKey } | null>(null);
@@ -156,7 +159,7 @@ export default function App() {
   async function fetchProfile(userId: string) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, nom_complet, role, etudiant_ipb')
+      .select('id, nom_complet, role, etudiant_ipb, notif_email, notif_whatsapp')
       .eq('id', userId)
       .maybeSingle();
 
@@ -168,7 +171,9 @@ export default function App() {
       console.warn('[auth] aucune ligne profile pour', userId, '— le trigger handle_new_user a-t-il bien créé le profil ?');
       return;
     }
-    setProfile(data as UserProfile);
+    const p = data as UserProfile;
+    setProfile(p);
+    setNotif({ email: p.notif_email ?? true, whatsapp: p.notif_whatsapp ?? false });
   }
 
   useEffect(() => {
@@ -198,6 +203,8 @@ export default function App() {
         setProfile(null);
         setFavs([]);
         setPrayed([]);
+        setNotifs([]);
+        setNotifOpen(false);
       }
     });
 
@@ -257,6 +264,52 @@ export default function App() {
       if (alreadyFav) removeFavori(profile.id, type, id);
       else addFavori(profile.id, type, id);
     }
+  }
+
+  /* ── Notifications ────────────────────────────────────────────────── */
+  // (Re)charge les notifications dès qu'un membre est connecté.
+  useEffect(() => {
+    if (!profile?.id) { setNotifs([]); return; }
+    setNotifsLoading(true);
+    getNotifications(profile.id)
+      .then(setNotifs)
+      .finally(() => setNotifsLoading(false));
+  }, [profile?.id]);
+
+  const unreadCount = notifs.filter(n => !n.lu).length;
+
+  function openNotifs() {
+    if (role === 'visiteur') {
+      setFriction({ title: 'Vos notifications', benefit: 'Créez un compte pour recevoir et gérer vos notifications.' });
+      return;
+    }
+    setNotifOpen(true);
+  }
+
+  function onNotifItem(n: AppNotification) {
+    // Marque comme lu (local + Supabase) puis suit le deeplink éventuel.
+    if (!n.lu && profile?.id) {
+      setNotifs(list => list.map(x => x.id === n.id ? { ...x, lu: true } : x));
+      markNotificationLue(profile.id, n.id);
+    }
+    setNotifOpen(false);
+    if (n.url && n.url.startsWith('/')) {
+      const page = n.url.replace(/^\/+/, '').split('/')[0];
+      if (page) nav(page);
+    }
+  }
+
+  function markAllNotifs() {
+    if (!profile?.id) return;
+    const unreadIds = notifs.filter(n => !n.lu).map(n => n.id);
+    if (!unreadIds.length) return;
+    setNotifs(list => list.map(x => ({ ...x, lu: true })));
+    markAllNotificationsLues(profile.id, unreadIds);
+  }
+
+  function changeNotifPrefs(n: Record<string, boolean>) {
+    setNotif({ email: !!n.email, whatsapp: !!n.whatsapp });
+    if (profile?.id) updateNotifPreferences(profile.id, { notif_email: !!n.email, notif_whatsapp: !!n.whatsapp });
   }
 
   /* ── Prayers ──────────────────────────────────────────────────────── */
@@ -331,8 +384,7 @@ export default function App() {
           onOpen={openDetail}
           onNav={nav}
           notif={notif}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setNotif={setNotif as any}
+          setNotif={changeNotifPrefs}
           onLogout={handleLogout}
           etudiantIpb={etudiantIpb}
           displayName={profile?.nom_complet ?? ''}
@@ -353,13 +405,10 @@ export default function App() {
             <AppBar
               role={role}
               initials={initials}
+              unread={unreadCount}
               onSearch={() => tab('recherche')}
               onProfile={() => tab('compte')}
-              onBell={() =>
-                role === 'visiteur'
-                  ? setFriction({ title: 'Vos notifications', benefit: 'Créez un compte pour recevoir et gérer vos notifications par email et WhatsApp.' })
-                  : tab('compte')
-              }
+              onBell={openNotifs}
             />
           )}
           <div className="app" ref={appRef}>
@@ -377,6 +426,7 @@ export default function App() {
           {toast && <Toast msg={toast.msg} accent={toast.accent} />}
           {friction && <FrictionModal config={friction} onCreate={frictionCreate} onContinue={() => setFriction(null)} onClose={() => setFriction(null)} />}
           {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} userId={profile?.id} />}
+          {notifOpen && <NotificationCenter items={notifs} loading={notifsLoading} onClose={() => setNotifOpen(false)} onItem={onNotifItem} onMarkAll={markAllNotifs} />}
         </div>
       </div>
     </div>

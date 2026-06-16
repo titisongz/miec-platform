@@ -3,6 +3,7 @@ import DB from './data';
 import type {
   Verse, Enseignement, Serie, Temoignage, Annonce,
   Priere, Ressource, Livre, Sortie, IPBCours, IPBProgramme, FavItem,
+  AppNotification,
 } from './types';
 
 // ── Helpers date ──────────────────────────────────────────────────────────────
@@ -961,4 +962,60 @@ export async function getModuleCounts(): Promise<Record<string, number>> {
     counts[k] = r.status === 'fulfilled' ? (r.value.count ?? 0) : 0;
   });
   return counts;
+}
+
+// ── Notifications (centre in-app) ───────────────────────────────────────────────
+
+// Liste les notifications diffusées, marquées lu/non-lu pour le membre courant.
+// Sans profileId (visiteur), tout est renvoyé comme non lu (la cloche n'est de
+// toute façon pas ouverte pour les visiteurs).
+export async function getNotifications(profileId?: string, limit = 30): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('notifications_push')
+    .select('id, titre, corps, module, url, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+
+  let lues = new Set<string>();
+  if (profileId) {
+    const { data: lu } = await supabase
+      .from('notifications_lues')
+      .select('notification_id')
+      .eq('profile_id', profileId);
+    lues = new Set((lu ?? []).map(r => r.notification_id as string));
+  }
+
+  return data.map(n => ({
+    id: n.id as string,
+    titre: n.titre as string,
+    corps: n.corps as string,
+    module: (n.module as string) ?? '',
+    url: (n.url as string) ?? undefined,
+    created_at: n.created_at as string,
+    lu: lues.has(n.id as string),
+  }));
+}
+
+// Marque une notification comme lue pour ce membre (idempotent via upsert).
+export async function markNotificationLue(profileId: string, notificationId: string): Promise<void> {
+  await supabase
+    .from('notifications_lues')
+    .upsert({ profile_id: profileId, notification_id: notificationId }, { onConflict: 'profile_id,notification_id' });
+}
+
+// Marque plusieurs notifications comme lues en une fois.
+export async function markAllNotificationsLues(profileId: string, ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await supabase
+    .from('notifications_lues')
+    .upsert(ids.map(id => ({ profile_id: profileId, notification_id: id })), { onConflict: 'profile_id,notification_id' });
+}
+
+// Met à jour les préférences de notification du membre (profiles).
+export async function updateNotifPreferences(
+  profileId: string,
+  prefs: { notif_email?: boolean; notif_whatsapp?: boolean },
+): Promise<void> {
+  await supabase.from('profiles').update(prefs).eq('id', profileId);
 }

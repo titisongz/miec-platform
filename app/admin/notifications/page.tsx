@@ -68,15 +68,20 @@ export default function PageNotifications() {
     if (!f.titre || !f.corps) return;
     setSending(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const { error } = await supabase.from('notifications_push').insert({
-        titre: f.titre, corps: f.corps, module: f.module || null, url: f.url || null, statut: 'envoyee',
+        titre: f.titre, corps: f.corps, module: f.module || null, url: f.url || null,
+        statut: 'envoyee', created_by: session?.user.id ?? null,
       });
       if (error) throw error;
       const n: NotifHistorique = { id: 'tmp-' + Date.now(), titre: f.titre, corps: f.corps, module: f.module, date: "à l'instant", statut: 'envoyee' };
       setHistorique([n, ...historique]);
       setF({ titre: '', corps: '', module: '', url: '' });
       pushToast('Notification envoyée à tous les membres', 'ipb');
-    } catch { pushToast('Erreur lors de l\'envoi', 'tem'); }
+    } catch (e) {
+      const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : String(e);
+      pushToast(`Erreur : ${msg}`, 'tem');
+    }
     setSending(false);
   }
 
