@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { PostgrestError } from '@supabase/supabase-js';
 import type { Enseignement, Serie, Annonce, Sortie } from './types';
+import { notifyNewAnnonce, notifyNewEnseignement, notifyNewSortie, notifyTemoignageValide } from './notifications';
 
 // ── Helpers communs ───────────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ export async function createEnseignement(data: {
     created_by: await authorId(),
   });
   if (error) failSupabase('createEnseignement', error);
+  notifyNewEnseignement(data.titre); // best-effort : notifie tous les membres
 }
 
 export async function updateEnseignement(id: string, data: Partial<{
@@ -211,8 +213,14 @@ export async function getPendingTemoignages() {
 }
 
 export async function approveTemoignage(id: string) {
-  const { error } = await supabase.from('temoignages').update({ statut: 'publie' }).eq('id', id);
+  const { data, error } = await supabase
+    .from('temoignages')
+    .update({ statut: 'publie' })
+    .eq('id', id)
+    .select('auteur_id, titre')
+    .single();
   if (error) failSupabase('approveTemoignage', error);
+  if (data?.auteur_id) notifyTemoignageValide(data.auteur_id as string, (data.titre as string) ?? 'votre témoignage');
 }
 
 export async function unpublishTemoignage(id: string) {
@@ -235,6 +243,7 @@ export async function createAnnonce(data: { titre: string; cat: string; date: st
     created_by: await authorId(),
   });
   if (error) failSupabase('createAnnonce', error);
+  notifyNewAnnonce(data.titre); // best-effort : notifie tous les membres
 }
 
 export async function updateAnnonce(id: string, data: { titre: string; cat: string; date: string; full: string; photos?: string[] }) {
@@ -329,6 +338,7 @@ export async function createSortie(data: { titre: string; date: string; heure?: 
     created_by: await authorId(),
   });
   if (error) failSupabase('createSortie', error);
+  notifyNewSortie(data.titre, data.date); // best-effort : notifie tous les membres
 }
 
 export async function updateSortie(id: string, data: { titre: string; date: string; heure?: string; equipe?: number; theme?: string; programme?: string; photos?: string[] }) {

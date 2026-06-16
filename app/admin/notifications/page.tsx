@@ -3,6 +3,13 @@ import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { PageHead, Panel, Field, Input, Textarea, Select, Badge, Reveal, Empty, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { supabase } from '@/lib/supabase';
+import { notifyBroadcast } from '@/lib/notifications';
+
+// Module admin → type de notification (pilote l'icône côté membre).
+const MODULE_TYPE: Record<string, string> = {
+  Enseignements: 'enseignement', Témoignages: 'temoignage', Annonces: 'annonce',
+  Prière: 'priere', Évangélisation: 'evangelisation', IPB: 'inscription_ipb',
+};
 
 type NotifForm = { titre: string; corps: string; module: string; url: string };
 type NotifHistorique = { id: string; titre: string; corps: string; module: string; date: string; statut: string };
@@ -69,11 +76,14 @@ export default function PageNotifications() {
     setSending(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // 1. Journal de la diffusion (historique back-office).
       const { error } = await supabase.from('notifications_push').insert({
         titre: f.titre, corps: f.corps, module: f.module || null, url: f.url || null,
         statut: 'envoyee', created_by: session?.user.id ?? null,
       });
       if (error) throw error;
+      // 2. Distribution dans la boîte de réception de chaque membre.
+      await notifyBroadcast(MODULE_TYPE[f.module] ?? 'annonce', f.titre, f.corps, f.url || undefined);
       const n: NotifHistorique = { id: 'tmp-' + Date.now(), titre: f.titre, corps: f.corps, module: f.module, date: "à l'instant", statut: 'envoyee' };
       setHistorique([n, ...historique]);
       setF({ titre: '', corps: '', module: '', url: '' });

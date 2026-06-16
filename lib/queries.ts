@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import DB from './data';
+import { notifyInscriptionIPB } from './notifications';
 import type {
   Verse, Enseignement, Serie, Temoignage, Annonce,
   Priere, Ressource, Livre, Sortie, IPBCours, IPBProgramme, FavItem,
@@ -392,6 +393,7 @@ export async function createInscription(data: {
     ...(data.profile_id ? { profile_id: data.profile_id } : {}),
   });
   if (error) throw error;
+  notifyInscriptionIPB(data.nom); // best-effort : notifie les responsables
 }
 
 // ── IPB — Programme académique ────────────────────────────────────────────────
@@ -964,52 +966,46 @@ export async function getModuleCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
-// ── Notifications (centre in-app) ───────────────────────────────────────────────
+// ── Notifications (boîte de réception du membre) ─────────────────────────────────
 
-// Liste les notifications diffusées, marquées lu/non-lu pour le membre courant.
-// Sans profileId (visiteur), tout est renvoyé comme non lu (la cloche n'est de
-// toute façon pas ouverte pour les visiteurs).
-export async function getNotifications(profileId?: string, limit = 30): Promise<AppNotification[]> {
+// Liste les notifications reçues par le membre courant (RLS : ses propres lignes).
+export async function getNotifications(profileId?: string, limit = 40): Promise<AppNotification[]> {
+  if (!profileId) return [];
   const { data, error } = await supabase
-    .from('notifications_push')
-    .select('id, titre, corps, module, url, created_at')
+    .from('notifications')
+    .select('id, type, titre, message, lien, lu, created_at')
+    .eq('profile_id', profileId)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error || !data) return [];
 
-  let lues = new Set<string>();
-  if (profileId) {
-    const { data: lu } = await supabase
-      .from('notifications_lues')
-      .select('notification_id')
-      .eq('profile_id', profileId);
-    lues = new Set((lu ?? []).map(r => r.notification_id as string));
-  }
-
   return data.map(n => ({
     id: n.id as string,
+    type: (n.type as string) ?? '',
     titre: n.titre as string,
-    corps: n.corps as string,
-    module: (n.module as string) ?? '',
-    url: (n.url as string) ?? undefined,
+    message: (n.message as string) ?? '',
+    lien: (n.lien as string) ?? undefined,
+    lu: !!n.lu,
     created_at: n.created_at as string,
-    lu: lues.has(n.id as string),
   }));
 }
 
-// Marque une notification comme lue pour ce membre (idempotent via upsert).
+// Marque une notification comme lue.
 export async function markNotificationLue(profileId: string, notificationId: string): Promise<void> {
   await supabase
-    .from('notifications_lues')
-    .upsert({ profile_id: profileId, notification_id: notificationId }, { onConflict: 'profile_id,notification_id' });
+    .from('notifications')
+    .update({ lu: true })
+    .eq('id', notificationId)
+    .eq('profile_id', profileId);
 }
 
-// Marque plusieurs notifications comme lues en une fois.
-export async function markAllNotificationsLues(profileId: string, ids: string[]): Promise<void> {
-  if (!ids.length) return;
+// Marque toutes les notifications non lues du membre comme lues.
+export async function markAllNotificationsLues(profileId: string): Promise<void> {
   await supabase
-    .from('notifications_lues')
-    .upsert(ids.map(id => ({ profile_id: profileId, notification_id: id })), { onConflict: 'profile_id,notification_id' });
+    .from('notifications')
+    .update({ lu: true })
+    .eq('profile_id', profileId)
+    .eq('lu', false);
 }
 
 // Met à jour les préférences de notification du membre (profiles).

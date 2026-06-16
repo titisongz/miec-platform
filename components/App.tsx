@@ -5,6 +5,7 @@ import { AppBar, FrictionModal, Sheet, Toggle, Spinner, NotificationCenter } fro
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import { supabase } from '@/lib/supabase';
 import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences } from '@/lib/queries';
+import { notifyNewPriere, notifyNewTemoignage } from '@/lib/notifications';
 import PageAccueil from '@/components/pages/accueil';
 import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/components/pages/modules1';
 import { PageRessources, PageLibrairie, PageEvangelisation } from '@/components/pages/modules2';
@@ -51,8 +52,8 @@ function Toast({ msg, accent }: { msg: string; accent: AccentKey }) {
 }
 
 /* ---------- SubmitSheet ---------- */
-function SubmitSheet({ config, onClose, userId }: {
-  config: FrictionConfig; onClose: () => void; userId?: string | null;
+function SubmitSheet({ config, onClose, userId, authorName }: {
+  config: FrictionConfig; onClose: () => void; userId?: string | null; authorName?: string;
 }) {
   const pri = config.mod === 'priere';
   const [step, setStep] = useState(0);
@@ -83,6 +84,9 @@ function SubmitSheet({ config, onClose, userId }: {
             statut: 'en_attente',
           });
       if (error) throw error;
+      // Notification automatique (best-effort, n'interrompt pas le flux).
+      if (pri) notifyNewPriere(v.anon ? 'Un membre' : (authorName || 'Un membre'), v.titre);
+      else notifyNewTemoignage(authorName || 'Un membre');
       setStep(2);
     } catch (e) {
       console.error('[submit] échec enregistrement', pri ? 'prière' : 'témoignage', ':', e);
@@ -293,18 +297,17 @@ export default function App() {
       markNotificationLue(profile.id, n.id);
     }
     setNotifOpen(false);
-    if (n.url && n.url.startsWith('/')) {
-      const page = n.url.replace(/^\/+/, '').split('/')[0];
+    if (n.lien && n.lien.startsWith('/')) {
+      const page = n.lien.replace(/^\/+/, '').split('/')[0];
       if (page) nav(page);
     }
   }
 
   function markAllNotifs() {
     if (!profile?.id) return;
-    const unreadIds = notifs.filter(n => !n.lu).map(n => n.id);
-    if (!unreadIds.length) return;
+    if (!notifs.some(n => !n.lu)) return;
     setNotifs(list => list.map(x => ({ ...x, lu: true })));
-    markAllNotificationsLues(profile.id, unreadIds);
+    markAllNotificationsLues(profile.id);
   }
 
   function changeNotifPrefs(n: Record<string, boolean>) {
@@ -425,7 +428,7 @@ export default function App() {
           )}
           {toast && <Toast msg={toast.msg} accent={toast.accent} />}
           {friction && <FrictionModal config={friction} onCreate={frictionCreate} onContinue={() => setFriction(null)} onClose={() => setFriction(null)} />}
-          {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} userId={profile?.id} />}
+          {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} userId={profile?.id} authorName={profile?.nom_complet} />}
           {notifOpen && <NotificationCenter items={notifs} loading={notifsLoading} onClose={() => setNotifOpen(false)} onItem={onNotifItem} onMarkAll={markAllNotifs} />}
         </div>
       </div>

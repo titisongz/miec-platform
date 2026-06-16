@@ -1,72 +1,127 @@
 -- ============================================================================
--- NOTIFICATIONS — centre in-app (broadcast admin + suivi lu/non-lu par membre)
+-- NOTIFICATIONS — boîte de réception PAR destinataire + déclencheurs auto
 -- À exécuter dans Supabase → SQL Editor (une seule fois). Idempotent.
 --
--- • notifications_push : messages diffusés depuis /admin/notifications.
--- • notifications_lues : quelles notifications chaque membre a déjà lues
---   (le badge « non lus » du front = total − lues).
--- Les préférences email/WhatsApp vivent déjà dans profiles (notif_email,
--- notif_whatsapp) → aucune colonne à créer ici.
+-- Modèle : une ligne `notifications` PAR membre destinataire (champ `lu`).
+-- Les notifications sont créées automatiquement (prière, témoignage, annonce,
+-- enseignement, sortie, inscription IPB) et aussi par diffusion manuelle admin.
+--
+-- Le fan-out « notifier tous les membres / les responsables » lit la table
+-- profiles, or la RLS `profiles: lecture proprio` interdit à un membre de lire
+-- les autres profils. On passe donc par des fonctions SECURITY DEFINER qui
+-- résolvent les destinataires côté serveur (en contournant la RLS).
+--
+-- `notifications_push` (table conservée) = simple JOURNAL des diffusions
+-- manuelles du back-office, pour l'historique de /admin/notifications.
 -- ============================================================================
 
 begin;
 
--- ── 1. Table des notifications diffusées ─────────────────────────────────────
+-- Ancien suivi lu/non-lu (remplacé par la colonne notifications.lu).
+drop table if exists public.notifications_lues cascade;
+
+-- ── 1. Journal des diffusions manuelles admin (historique back-office) ───────
 create table if not exists public.notifications_push (
   id          uuid primary key default gen_random_uuid(),
   titre       text not null,
   corps       text not null,
-  module      text,                       -- libellé de catégorie (ou NULL = Général)
-  url         text,                       -- deeplink optionnel
+  module      text,
+  url         text,
   statut      text not null default 'envoyee',
   created_by  uuid references public.profiles(id) on delete set null,
   created_at  timestamptz not null default now()
 );
-
 create index if not exists idx_notifications_push_created_at
   on public.notifications_push(created_at desc);
 
--- ── 2. Suivi des lectures par membre ─────────────────────────────────────────
-create table if not exists public.notifications_lues (
-  profile_id      uuid not null references public.profiles(id)          on delete cascade,
-  notification_id uuid not null references public.notifications_push(id) on delete cascade,
-  lu_at           timestamptz not null default now(),
-  primary key (profile_id, notification_id)
+-- ── 2. Boîte de réception par destinataire (modèle principal) ────────────────
+create table if not exists public.notifications (
+  id          uuid primary key default gen_random_uuid(),
+  profile_id  uuid not null references public.profiles(id) on delete cascade,
+  type        text not null,   -- priere | temoignage | annonce | enseignement | evangelisation | inscription_ipb
+  titre       text not null,
+  message     text not null,
+  lien        text,            -- URL relative vers le contenu (ex. /priere)
+  lu          boolean not null default false,
+  created_at  timestamptz not null default now()
 );
-
-create index if not exists idx_notifications_lues_profile
-  on public.notifications_lues(profile_id);
+create index if not exists idx_notifications_profile
+  on public.notifications(profile_id, created_at desc);
+create index if not exists idx_notifications_unread
+  on public.notifications(profile_id) where lu = false;
 
 -- ── 3. RLS ───────────────────────────────────────────────────────────────────
+alter table public.notifications      enable row level security;
 alter table public.notifications_push enable row level security;
-alter table public.notifications_lues enable row level security;
 
--- notifications_push : lecture publique (le front filtre les visiteurs côté UI),
--- écriture réservée aux responsables (back-office).
+-- notifications : chaque membre ne voit / ne modifie QUE les siennes.
+-- L'insert est ouvert aux authenticated (les fonctions de fan-out ci-dessous
+-- insèrent pour autrui, mais sont de toute façon SECURITY DEFINER).
+drop policy if exists "notifications: lecture proprio" on public.notifications;
+create policy "notifications: lecture proprio"
+  on public.notifications for select
+  using (profile_id = auth.uid());
+
+drop policy if exists "notifications: maj proprio" on public.notifications;
+create policy "notifications: maj proprio"
+  on public.notifications for update
+  using (profile_id = auth.uid()) with check (profile_id = auth.uid());
+
+drop policy if exists "notifications: suppression proprio" on public.notifications;
+create policy "notifications: suppression proprio"
+  on public.notifications for delete
+  using (profile_id = auth.uid());
+
+drop policy if exists "notifications: insert authentifié" on public.notifications;
+create policy "notifications: insert authentifié"
+  on public.notifications for insert to authenticated
+  with check (true);
+
+-- notifications_push : lecture publique (historique admin), écriture responsable.
 drop policy if exists "notifications_push: lecture publique" on public.notifications_push;
 create policy "notifications_push: lecture publique"
-  on public.notifications_push for select
-  using (true);
+  on public.notifications_push for select using (true);
 
 drop policy if exists "notifications_push: écriture responsable" on public.notifications_push;
 create policy "notifications_push: écriture responsable"
   on public.notifications_push for all
   using (est_responsable()) with check (est_responsable());
 
--- notifications_lues : chaque membre ne voit / n'écrit QUE ses propres lectures.
-drop policy if exists "notifications_lues: lecture proprio" on public.notifications_lues;
-create policy "notifications_lues: lecture proprio"
-  on public.notifications_lues for select
-  using (profile_id = auth.uid());
+-- ── 4. Fonctions de fan-out (SECURITY DEFINER : lisent profiles malgré la RLS) ─
+-- `id is distinct from auth.uid()` exclut l'auteur de l'action (et reste
+-- correct quand auth.uid() est NULL, ex. inscription IPB par un visiteur).
 
-drop policy if exists "notifications_lues: insert proprio" on public.notifications_lues;
-create policy "notifications_lues: insert proprio"
-  on public.notifications_lues for insert
-  with check (profile_id = auth.uid());
+create or replace function public.notifier_tous(
+  p_type text, p_titre text, p_message text, p_lien text
+) returns void
+language sql security definer set search_path = public as $$
+  insert into public.notifications (profile_id, type, titre, message, lien)
+  select p.id, p_type, p_titre, p_message, p_lien
+  from public.profiles p
+  where p.id is distinct from auth.uid();
+$$;
 
-drop policy if exists "notifications_lues: delete proprio" on public.notifications_lues;
-create policy "notifications_lues: delete proprio"
-  on public.notifications_lues for delete
-  using (profile_id = auth.uid());
+create or replace function public.notifier_responsables(
+  p_type text, p_titre text, p_message text, p_lien text
+) returns void
+language sql security definer set search_path = public as $$
+  insert into public.notifications (profile_id, type, titre, message, lien)
+  select p.id, p_type, p_titre, p_message, p_lien
+  from public.profiles p
+  where p.role in ('responsable', 'super_admin')
+    and p.id is distinct from auth.uid();
+$$;
+
+create or replace function public.notifier_membre(
+  p_profile uuid, p_type text, p_titre text, p_message text, p_lien text
+) returns void
+language sql security definer set search_path = public as $$
+  insert into public.notifications (profile_id, type, titre, message, lien)
+  values (p_profile, p_type, p_titre, p_message, p_lien);
+$$;
+
+grant execute on function public.notifier_tous(text, text, text, text)               to anon, authenticated;
+grant execute on function public.notifier_responsables(text, text, text, text)        to anon, authenticated;
+grant execute on function public.notifier_membre(uuid, text, text, text, text)        to anon, authenticated;
 
 commit;

@@ -195,18 +195,16 @@ export function Sheet({ onClose, children, center = false }: {
 }
 
 /* ---------- centre de notifications ---------- */
-const NOTIF_MODULE: Record<string, { icon: string; accent: AccentKey }> = {
-  Enseignements:  { icon: 'book',    accent: 'ens' },
-  Témoignages:    { icon: 'quote',   accent: 'tem' },
-  Annonces:       { icon: 'mega',    accent: 'ann' },
-  Prière:         { icon: 'flame',   accent: 'pri' },
-  Ressources:     { icon: 'folder',  accent: 'res' },
-  Librairie:      { icon: 'books',   accent: 'ipb' },
-  Évangélisation: { icon: 'compass', accent: 'eva' },
-  IPB:            { icon: 'cap',     accent: 'ipb' },
-  Général:        { icon: 'bell',    accent: 'slate' },
+// Métadonnées d'affichage par type de notification (table notifications.type).
+const NOTIF_TYPE: Record<string, { icon: string; accent: AccentKey; label: string }> = {
+  priere:         { icon: 'flame',   accent: 'pri',   label: 'Prière' },
+  temoignage:     { icon: 'quote',   accent: 'tem',   label: 'Témoignage' },
+  annonce:        { icon: 'mega',    accent: 'ann',   label: 'Annonce' },
+  enseignement:   { icon: 'book',    accent: 'ens',   label: 'Enseignement' },
+  evangelisation: { icon: 'compass', accent: 'eva',   label: 'Évangélisation' },
+  inscription_ipb:{ icon: 'cap',     accent: 'ipb',   label: 'IPB' },
 };
-function notifMeta(module: string) { return NOTIF_MODULE[module] ?? NOTIF_MODULE['Général']; }
+function notifMeta(type: string) { return NOTIF_TYPE[type] ?? { icon: 'bell', accent: 'slate' as AccentKey, label: 'Général' }; }
 
 // Temps relatif court (« il y a 2 h »). Client-only : rendu uniquement à
 // l'ouverture de la cloche, donc pas de souci d'hydratation.
@@ -255,7 +253,7 @@ export function NotificationCenter({ items, loading, onClose, onItem, onMarkAll 
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 460, overflowY: 'auto', margin: '0 -4px', padding: '0 4px 4px' }}>
           {items.map(n => {
-            const m = notifMeta(n.module);
+            const m = notifMeta(n.type);
             return (
               <button key={n.id} onClick={() => onItem(n)} style={{ ...accentStyle(m.accent), display: 'flex', gap: 12, alignItems: 'flex-start', textAlign: 'left', padding: '13px 13px', borderRadius: 14, background: n.lu ? 'var(--bg-soft)' : 'var(--c-t)', border: '1px solid var(--line)', transition: 'background .18s' }}>
                 <span style={{ width: 38, height: 38, borderRadius: 11, background: n.lu ? 'var(--surface)' : 'var(--c)', color: n.lu ? 'var(--c-i)' : '#fff', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
@@ -266,9 +264,9 @@ export function NotificationCenter({ items, loading, onClose, onItem, onMarkAll 
                     <span style={{ flex: 1, fontWeight: n.lu ? 600 : 800, fontSize: 14, lineHeight: 1.3 }}>{n.titre}</span>
                     {!n.lu && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c)', flex: '0 0 auto' }} />}
                   </span>
-                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.4, marginTop: 3 }}>{n.corps}</span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.4, marginTop: 3 }}>{n.message}</span>
                   <span className="t3" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, marginTop: 6 }}>
-                    <span style={{ color: 'var(--c-i)' }}>{n.module || 'Général'}</span>·<span>{relTime(n.created_at)}</span>
+                    <span style={{ color: 'var(--c-i)' }}>{m.label}</span>·<span>{relTime(n.created_at)}</span>
                   </span>
                 </span>
               </button>

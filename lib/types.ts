@@ -12,15 +12,15 @@ export interface UserProfile {
   notif_whatsapp?: boolean;
 }
 
-// Notification diffusée (notifications_push) + statut lu/non-lu pour le membre courant.
+// Notification reçue par le membre courant (table notifications, par destinataire).
 export interface AppNotification {
   id: string;
+  type: string;     // priere | temoignage | annonce | enseignement | evangelisation | inscription_ipb
   titre: string;
-  corps: string;
-  module: string;
-  url?: string;
-  created_at: string;
+  message: string;
+  lien?: string;    // URL relative vers le contenu
   lu: boolean;
+  created_at: string;
 }
 export type PageKey =
   | 'accueil' | 'recherche' | 'priere' | 'compte'
