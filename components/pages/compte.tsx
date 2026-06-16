@@ -384,7 +384,11 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
         <Reveal>
           <div className="card" style={{ padding: '4px 0' }}>
             {([
-              ['Profil personnel', 'user', () => setEditOpen(true)],
+              ['Profil personnel', 'user', () => {
+                // Ouvre le ProfileEditor en Sheet (popup) — aucune navigation de route.
+                console.log('[compte] clic « Profil personnel » → ouverture ProfileEditor (Sheet)');
+                setEditOpen(true);
+              }],
               ['Confidentialité', 'lock', undefined],
               ['Aide & contact', 'info', undefined],
             ] as [string, string, (() => void) | undefined][]).map((r, i) => (
