@@ -225,7 +225,7 @@ export function SubmitSheet({ config, onClose }: {
 }
 
 /* ---------- Page Compte ---------- */
-export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, setNotif, onLogout, etudiantIpb = false, displayName = '', initials = '' }: {
+export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, setNotif, onLogout, etudiantIpb = false, displayName = '', telephone = '', onSaveProfile, initials = '' }: {
   role: string; onLogin: () => void;
   favs: FavItem[]; onOpen: (t: string, i: unknown) => void;
   onNav: (p: string, params?: string) => void;
@@ -233,8 +233,11 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
   onLogout: () => void;
   etudiantIpb?: boolean;
   displayName?: string;
+  telephone?: string;
+  onSaveProfile?: (fields: { nom_complet: string; telephone_whatsapp: string; notif_email: boolean; notif_whatsapp: boolean }) => Promise<boolean>;
   initials?: string;
 }) {
+  const [editOpen, setEditOpen] = useState(false);
   if (role === 'visiteur') return <AuthScreen onLogin={onLogin} />;
   const etu = etudiantIpb;
   // Données fictives retirées. À brancher sur les vraies contributions /
@@ -380,8 +383,12 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
       <div className="section" style={{ paddingTop: 18 }}>
         <Reveal>
           <div className="card" style={{ padding: '4px 0' }}>
-            {[['Profil personnel', 'user'], ['Confidentialité', 'lock'], ['Aide & contact', 'info']].map((r, i) => (
-              <button key={i} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 16px', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
+            {([
+              ['Profil personnel', 'user', () => setEditOpen(true)],
+              ['Confidentialité', 'lock', undefined],
+              ['Aide & contact', 'info', undefined],
+            ] as [string, string, (() => void) | undefined][]).map((r, i) => (
+              <button key={i} onClick={r[2]} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 13, padding: '14px 16px', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
                 <Icon n={r[1]} size={18} style={{ color: 'var(--ink-2)', flex: '0 0 auto' }} />
                 <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{r[0]}</span>
                 <Icon n="cr" size={16} style={{ color: 'var(--ink-3)' }} />
@@ -394,6 +401,88 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
           </div>
         </Reveal>
       </div>
+
+      {editOpen && (
+        <ProfileEditor
+          initialNom={displayName}
+          initialTel={telephone}
+          initialNotif={{ email: !!notif.email, whatsapp: !!notif.whatsapp }}
+          onSave={onSaveProfile}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+/* ---------- Profile editor (sheet) ---------- */
+const FIELD_LABEL: React.CSSProperties = {
+  display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 6,
+};
+
+function ProfileEditor({ initialNom, initialTel, initialNotif, onSave, onClose }: {
+  initialNom: string;
+  initialTel: string;
+  initialNotif: { email: boolean; whatsapp: boolean };
+  onSave?: (fields: { nom_complet: string; telephone_whatsapp: string; notif_email: boolean; notif_whatsapp: boolean }) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [nom, setNom] = useState(initialNom);
+  const [tel, setTel] = useState(initialTel);
+  const [email, setEmail] = useState(initialNotif.email);
+  const [wa, setWa] = useState(initialNotif.whatsapp);
+  const [busy, setBusy] = useState(false);
+  const ok = nom.trim().length > 0;
+
+  async function go() {
+    if (!ok || busy || !onSave) return;
+    setBusy(true);
+    const success = await onSave({ nom_complet: nom, telephone_whatsapp: tel, notif_email: email, notif_whatsapp: wa });
+    setBusy(false);
+    if (success) onClose();
+  }
+
+  const rows = [
+    { key: 'email', icon: 'mail', label: 'Email', desc: 'Annonces, enseignements et rappels', accent: 'ann' as AccentKey, on: email, set: setEmail },
+    { key: 'whatsapp', icon: 'wa', label: 'WhatsApp', desc: 'Alertes importantes et sorties', accent: 'ens' as AccentKey, on: wa, set: setWa },
+  ];
+
+  return (
+    <Sheet onClose={onClose}>
+      <div style={accentStyle('slate')}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}><Icon n="user" size={14} sw={2} />Profil personnel</div>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 16 }}>Modifier mon profil</div>
+
+        <label style={{ display: 'block', marginBottom: 13 }}>
+          <span style={FIELD_LABEL}>Nom complet</span>
+          <input value={nom} onChange={e => setNom(e.target.value)} placeholder="Grâce Mbarga" style={INP_STYLE} />
+        </label>
+
+        <label style={{ display: 'block', marginBottom: 18 }}>
+          <span style={FIELD_LABEL}>Téléphone WhatsApp</span>
+          <input type="tel" inputMode="tel" value={tel} onChange={e => setTel(e.target.value)} placeholder="+237 6XX XX XX XX" style={INP_STYLE} />
+        </label>
+
+        <span style={FIELD_LABEL}>Préférences de notification</span>
+        <div className="card" style={{ overflow: 'hidden', marginBottom: 18 }}>
+          {rows.map((r, i) => (
+            <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 14px', borderBottom: i === 0 ? '1px solid var(--line)' : 'none' }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', flex: '0 0 auto', background: r.key === 'whatsapp' ? 'var(--m-ens-t)' : 'var(--m-ann-t)', color: r.key === 'whatsapp' ? 'var(--m-ens-i)' : 'var(--m-ann-i)' }}>
+                <Icon n={r.icon} size={18} />
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{r.label}</div>
+                <div className="t3" style={{ fontSize: 11.5, fontWeight: 500, lineHeight: 1.35 }}>{r.desc}</div>
+              </div>
+              <Toggle on={r.on} onTog={() => r.set(!r.on)} accent={r.accent} />
+            </div>
+          ))}
+        </div>
+
+        <button className="btn btn-primary btn-block" disabled={!ok || busy} style={{ opacity: ok ? 1 : .5 }} onClick={go}>
+          {busy ? <><Spinner />Enregistrement…</> : 'Enregistrer'}
+        </button>
+      </div>
+    </Sheet>
   );
 }

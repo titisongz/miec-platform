@@ -6,6 +6,7 @@ export type Role = 'visiteur' | 'membre' | 'responsable' | 'super_admin';
 export interface UserProfile {
   id: string;
   nom_complet: string;
+  telephone_whatsapp?: string;
   role: 'membre' | 'responsable' | 'super_admin';
   etudiant_ipb: boolean;
   notif_email?: boolean;

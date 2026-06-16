@@ -4,7 +4,7 @@ import Icon from '@/components/icons';
 import { AppBar, FrictionModal, Sheet, Toggle, Spinner, NotificationCenter } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import { supabase } from '@/lib/supabase';
-import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences } from '@/lib/queries';
+import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences, updateProfile } from '@/lib/queries';
 import { notifyNewPriere, notifyNewTemoignage } from '@/lib/notifications';
 import PageAccueil from '@/components/pages/accueil';
 import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/components/pages/modules1';
@@ -163,7 +163,7 @@ export default function App() {
   async function fetchProfile(userId: string) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, nom_complet, role, etudiant_ipb, notif_email, notif_whatsapp')
+      .select('id, nom_complet, telephone_whatsapp, role, etudiant_ipb, notif_email, notif_whatsapp')
       .eq('id', userId)
       .maybeSingle();
 
@@ -315,6 +315,32 @@ export default function App() {
     if (profile?.id) updateNotifPreferences(profile.id, { notif_email: !!n.email, notif_whatsapp: !!n.whatsapp });
   }
 
+  // Édition du profil personnel (nom, téléphone WhatsApp, préférences notif).
+  // Persiste dans profiles puis synchronise l'état local + affiche un toast.
+  async function saveProfile(fields: {
+    nom_complet: string; telephone_whatsapp: string; notif_email: boolean; notif_whatsapp: boolean;
+  }): Promise<boolean> {
+    if (!profile?.id) return false;
+    const { error } = await updateProfile(profile.id, {
+      nom_complet: fields.nom_complet.trim(),
+      telephone_whatsapp: fields.telephone_whatsapp.trim() || null,
+      notif_email: fields.notif_email,
+      notif_whatsapp: fields.notif_whatsapp,
+    });
+    if (error) {
+      setToast({ msg: 'Échec de l’enregistrement', accent: 'tem' });
+      return false;
+    }
+    setProfile(p => p ? {
+      ...p,
+      nom_complet: fields.nom_complet.trim(),
+      telephone_whatsapp: fields.telephone_whatsapp.trim(),
+    } : p);
+    setNotif({ email: fields.notif_email, whatsapp: fields.notif_whatsapp });
+    setToast({ msg: 'Profil mis à jour', accent: 'slate' });
+    return true;
+  }
+
   /* ── Prayers ──────────────────────────────────────────────────────── */
   function pray(id: string) {
     setPrayed(p => {
@@ -391,6 +417,8 @@ export default function App() {
           onLogout={handleLogout}
           etudiantIpb={etudiantIpb}
           displayName={profile?.nom_complet ?? ''}
+          telephone={profile?.telephone_whatsapp ?? ''}
+          onSaveProfile={saveProfile}
           initials={initials}
         />
       );

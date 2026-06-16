@@ -1015,3 +1015,18 @@ export async function updateNotifPreferences(
 ): Promise<void> {
   await supabase.from('profiles').update(prefs).eq('id', profileId);
 }
+
+// Met à jour le profil personnel du membre (nom, téléphone WhatsApp, préférences).
+// La RLS « profiles: mise à jour proprio » autorise un membre à modifier sa ligne.
+export async function updateProfile(
+  profileId: string,
+  fields: {
+    nom_complet?: string;
+    telephone_whatsapp?: string | null;
+    notif_email?: boolean;
+    notif_whatsapp?: boolean;
+  },
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('profiles').update(fields).eq('id', profileId);
+  return { error: error?.message ?? null };
+}
