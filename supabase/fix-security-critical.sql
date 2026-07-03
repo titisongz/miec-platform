@@ -9,6 +9,10 @@
 --   3. Bucket Storage « media » : upload/maj/suppression ouverts à tout
 --      utilisateur connecté au lieu des seuls responsables/super_admin.
 --
+-- Prérequis (Action 0) : la table public.notifications, dont dépend
+-- l'Action 2, est recréée en `if not exists` — supabase/fix-notifications.sql
+-- s'est avéré ne pas avoir été appliqué tel quel sur cette base.
+--
 -- DIAGNOSTIC — à lancer AVANT le script pour voir les signatures réellement
 -- déployées (utile si ce script échoue de nouveau avec "function ... does
 -- not exist" — l'Action 2 ci-dessous ne dépend plus de ce résultat, elle
@@ -23,6 +27,55 @@
 -- ============================================================================
 
 begin;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- ACTION 0 — Prérequis : table `notifications`
+-- ────────────────────────────────────────────────────────────────────────────
+-- La 2e tentative de ce script a échoué avec « relation "public.notifications"
+-- does not exist » : supabase/fix-notifications.sql, qui est censé créer
+-- cette table, n'a en réalité jamais été appliqué sur cette base (ou l'a été
+-- différemment). Les fonctions notifier_* de l'Action 2 en dépendent — on la
+-- (re)crée donc ici avant tout, en `if not exists` pour rester sans danger
+-- si elle existe déjà. Définition identique à supabase/fix-notifications.sql.
+
+create table if not exists public.notifications (
+  id          uuid primary key default gen_random_uuid(),
+  profile_id  uuid not null references public.profiles(id) on delete cascade,
+  type        text not null,
+  titre       text not null,
+  message     text not null,
+  lien        text,
+  lu          boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists idx_notifications_profile
+  on public.notifications(profile_id, created_at desc);
+create index if not exists idx_notifications_unread
+  on public.notifications(profile_id) where lu = false;
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications: lecture proprio" on public.notifications;
+create policy "notifications: lecture proprio"
+  on public.notifications for select
+  using (profile_id = auth.uid());
+
+drop policy if exists "notifications: maj proprio" on public.notifications;
+create policy "notifications: maj proprio"
+  on public.notifications for update
+  using (profile_id = auth.uid()) with check (profile_id = auth.uid());
+
+drop policy if exists "notifications: suppression proprio" on public.notifications;
+create policy "notifications: suppression proprio"
+  on public.notifications for delete
+  using (profile_id = auth.uid());
+
+drop policy if exists "notifications: insert authentifié" on public.notifications;
+create policy "notifications: insert authentifié"
+  on public.notifications for insert to authenticated
+  with check (true);
+
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- ACTION 1 — profiles : fin de l'auto-escalade de rôle
