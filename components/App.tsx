@@ -163,7 +163,7 @@ export default function App() {
   async function fetchProfile(userId: string) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, nom_complet, telephone_whatsapp, role, etudiant_ipb, notif_email, notif_whatsapp')
+      .select('id, nom_complet, telephone_whatsapp, role, etudiant_ipb, actif, notif_email, notif_whatsapp')
       .eq('id', userId)
       .maybeSingle();
 
@@ -176,6 +176,14 @@ export default function App() {
       return;
     }
     const p = data as UserProfile;
+    // Compte désactivé (super admin → /superadmin/membres) : on ne laisse
+    // jamais une session active se traduire par un profil chargé, même si
+    // le JWT reste valide quelques minutes côté Supabase.
+    if (p.actif === false) {
+      await supabase.auth.signOut();
+      setToast({ msg: 'Votre compte a été désactivé. Contactez un responsable.', accent: 'tem' });
+      return;
+    }
     setProfile(p);
     setNotif({ email: p.notif_email ?? true, whatsapp: p.notif_whatsapp ?? false });
   }

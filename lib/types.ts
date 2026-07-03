@@ -9,6 +9,7 @@ export interface UserProfile {
   telephone_whatsapp?: string;
   role: 'membre' | 'responsable' | 'super_admin';
   etudiant_ipb: boolean;
+  actif?: boolean;
   notif_email?: boolean;
   notif_whatsapp?: boolean;
 }

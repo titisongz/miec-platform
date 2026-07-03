@@ -8,14 +8,11 @@
 -- 'responsable' | 'super_admin') — l'action levait systématiquement une
 -- erreur Postgres et n'a donc jamais fonctionné.
 --
--- ATTENTION — portée volontairement limitée à ce que demande l'audit :
--- cette colonne existe et le bouton « Désactiver le compte » l'écrit
--- désormais correctement (plus d'erreur), mais RIEN ne la LIT encore pour
--- bloquer l'accès d'un compte désactivé (ni components/App.tsx à la
--- connexion, ni RLS). Un compte marqué actif=false peut donc aujourd'hui
--- continuer à utiliser l'application normalement. Faire respecter ce flag
--- (bloquer la connexion / les policies RLS) est un chantier séparé, plus
--- large, à traiter explicitement si besoin.
+-- MISE À JOUR : le flag est désormais appliqué, pas seulement stocké —
+-- components/App.tsx déconnecte un compte actif=false dès que son profil
+-- est rechargé, et supabase/fix-compte-actif-rls.sql (à exécuter après ce
+-- script) bloque ses écritures au niveau RLS même si son JWT reste valide
+-- entre-temps.
 -- ============================================================================
 
 begin;
