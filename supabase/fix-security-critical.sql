@@ -8,6 +8,18 @@
 --      notifier_membre) exécutables par des visiteurs anonymes (grant `anon`).
 --   3. Bucket Storage « media » : upload/maj/suppression ouverts à tout
 --      utilisateur connecté au lieu des seuls responsables/super_admin.
+--
+-- DIAGNOSTIC — à lancer AVANT le script pour voir les signatures réellement
+-- déployées (utile si ce script échoue de nouveau avec "function ... does
+-- not exist" — l'Action 2 ci-dessous ne dépend plus de ce résultat, elle
+-- supprime dynamiquement toutes les variantes existantes, mais cette requête
+-- reste utile pour comprendre l'état de la base avant intervention) :
+--
+--   select p.proname, pg_get_function_arguments(p.oid) as arguments
+--   from pg_proc p
+--   join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public'
+--     and p.proname in ('notifier_tous', 'notifier_responsables', 'notifier_membre');
 -- ============================================================================
 
 begin;
@@ -87,24 +99,33 @@ create trigger trg_profiles_verrou_colonnes
 -- ────────────────────────────────────────────────────────────────────────────
 -- ACTION 2 — Notifications : retrait de l'accès anonyme
 -- ────────────────────────────────────────────────────────────────────────────
--- Signatures réelles (cf. supabase/fix-notifications.sql) : les 3 fonctions
--- prennent bien `p_type` en premier paramètre. Un REVOKE/GRANT sur une
--- signature différente échoue (fonction introuvable) ou, pire, laisse
--- l'ancienne fonction — toujours ouverte à `anon` — inchangée.
+-- La signature réellement déployée sur ce projet ne correspond pas à celle
+-- de supabase/fix-notifications.sql dans le repo (constaté : le premier
+-- essai de ce script a échoué avec « function notifier_tous(text,text,
+-- text,text) does not exist »). Un REVOKE/CREATE OR REPLACE qui suppose une
+-- signature précise est donc fragile. On supprime plutôt TOUTES les
+-- variantes existantes de ces 3 fonctions, quelle que soit leur signature
+-- réelle, puis on les recrée proprement avec une signature unique et connue.
 
-revoke execute on function public.notifier_tous(text, text, text, text)        from anon;
-revoke execute on function public.notifier_responsables(text, text, text, text) from anon;
-revoke execute on function public.notifier_membre(uuid, text, text, text, text) from anon;
+do $$
+declare
+  r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('notifier_tous', 'notifier_responsables', 'notifier_membre')
+  loop
+    execute format('drop function %s', r.sig);
+  end loop;
+end $$;
 
-grant execute on function public.notifier_tous(text, text, text, text)         to authenticated;
-grant execute on function public.notifier_responsables(text, text, text, text)  to authenticated;
-grant execute on function public.notifier_membre(uuid, text, text, text, text)  to authenticated;
-
--- Durcissement supplémentaire de notifier_tous : seuls responsable/super_admin
--- peuvent diffuser à TOUS les membres. On conserve `p_type` (sinon la
--- signature change et l'ancienne fonction 4-arguments — encore accessible à
--- authenticated — resterait active en parallèle sans le contrôle de rôle).
-create or replace function public.notifier_tous(
+-- Diffusion à TOUS les membres — réservée à responsable/super_admin.
+-- (Avant : n'importe quel membre pouvait broadcaster à toute la
+-- communauté via cette fonction, ex. en soumettant une prière.)
+create function public.notifier_tous(
   p_type text, p_titre text, p_message text, p_lien text
 ) returns void
 language plpgsql security definer set search_path = public as $$
@@ -122,6 +143,42 @@ begin
   where p.id is distinct from auth.uid();
 end;
 $$;
+
+-- Diffusion aux responsables/super_admin — inchangée (logique identique à
+-- supabase/fix-notifications.sql), juste recréée pour repartir d'une base
+-- propre après le drop ci-dessus.
+create function public.notifier_responsables(
+  p_type text, p_titre text, p_message text, p_lien text
+) returns void
+language sql security definer set search_path = public as $$
+  insert into public.notifications (profile_id, type, titre, message, lien)
+  select p.id, p_type, p_titre, p_message, p_lien
+  from public.profiles p
+  where p.role in ('responsable', 'super_admin')
+    and p.id is distinct from auth.uid();
+$$;
+
+-- Notification à UN destinataire précis — inchangée elle aussi.
+create function public.notifier_membre(
+  p_profile uuid, p_type text, p_titre text, p_message text, p_lien text
+) returns void
+language sql security definer set search_path = public as $$
+  insert into public.notifications (profile_id, type, titre, message, lien)
+  values (p_profile, p_type, p_titre, p_message, p_lien);
+$$;
+
+-- IMPORTANT : une fonction nouvellement créée accorde EXECUTE à PUBLIC par
+-- défaut en PostgreSQL — et PUBLIC s'applique à `anon` comme à tout le
+-- reste. Un simple `revoke ... from anon` sans toucher à PUBLIC laisse donc
+-- la porte ouverte. On révoque PUBLIC explicitement avant de ne réaccorder
+-- qu'à `authenticated`.
+revoke execute on function public.notifier_tous(text, text, text, text)         from public;
+revoke execute on function public.notifier_responsables(text, text, text, text) from public;
+revoke execute on function public.notifier_membre(uuid, text, text, text, text) from public;
+
+grant execute on function public.notifier_tous(text, text, text, text)         to authenticated;
+grant execute on function public.notifier_responsables(text, text, text, text) to authenticated;
+grant execute on function public.notifier_membre(uuid, text, text, text, text) to authenticated;
 
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -189,9 +246,17 @@ commit;
 --        and (tablename = 'profiles' or tablename = 'objects')
 --      order by tablename, policyname;
 --
--- 3. Vérifier les grants sur les fonctions de notification :
+-- 3. Vérifier les grants sur les fonctions de notification (doit lister
+--    UNE seule ligne par fonction, avec grantee = authenticated uniquement —
+--    ni anon, ni PUBLIC) :
 --      select routine_name, grantee, privilege_type
 --      from information_schema.role_routine_grants
 --      where routine_name in ('notifier_tous','notifier_responsables','notifier_membre');
---    → `anon` ne doit plus apparaître.
+--
+-- 4. Confirmer qu'il n'y a plus qu'une seule signature par fonction :
+--      select p.proname, pg_get_function_arguments(p.oid) as arguments
+--      from pg_proc p
+--      join pg_namespace n on n.oid = p.pronamespace
+--      where n.nspname = 'public'
+--        and p.proname in ('notifier_tous', 'notifier_responsables', 'notifier_membre');
 -- ============================================================================
