@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
 import AIcon from '@/components/admin/icon';
-import { getAllProfiles, updateProfileRole, setEtudiantIPB, logAction, type Profile } from '@/lib/admin-queries';
+import { getAllProfiles, setProfileActif, setEtudiantIPB, logAction, type Profile } from '@/lib/admin-queries';
 
 function useToasts() {
   const [toasts, setToasts] = useState<{ id: number; msg: string; out?: boolean }[]>([]);
@@ -31,7 +31,7 @@ function ConfirmModal({ profile, onClose, onConfirm }: { profile: Profile; onClo
         </div>
         <div className="sa-modal-body">
           <div className="sa-confirm-warn">
-            <p>Le compte de <strong>{profile.nom_complet}</strong> sera rétrogradé au rôle <strong>Visiteur</strong>. Il ne pourra plus accéder aux contenus réservés aux membres. Cette action est journalisée.</p>
+            <p>Le compte de <strong>{profile.nom_complet}</strong> sera marqué comme désactivé. Cette action est journalisée.</p>
           </div>
           <label className="sa-confirm-check">
             <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} />
@@ -53,7 +53,7 @@ function ConfirmModal({ profile, onClose, onConfirm }: { profile: Profile; onClo
   );
 }
 
-const ROLE_LABEL: Record<string, string> = { super_admin: 'Super Admin', responsable: 'Responsable', membre: 'Membre', visiteur: 'Visiteur' };
+const ROLE_LABEL: Record<string, string> = { super_admin: 'Super Admin', responsable: 'Responsable', membre: 'Membre' };
 
 export default function PageMembres() {
   const [all, setAll] = useState<Profile[]>([]);
@@ -61,6 +61,7 @@ export default function PageMembres() {
   const [q, setQ] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [ipbFilter, setIpbFilter] = useState('');
+  const [statutFilter, setStatutFilter] = useState('');
   const [deactivate, setDeactivate] = useState<Profile | null>(null);
   const [toasts, push] = useToasts();
 
@@ -72,19 +73,21 @@ export default function PageMembres() {
     if (roleFilter && p.role !== roleFilter) return false;
     if (ipbFilter === 'oui' && !p.etudiant_ipb) return false;
     if (ipbFilter === 'non' && p.etudiant_ipb) return false;
+    if (statutFilter === 'actif' && !p.actif) return false;
+    if (statutFilter === 'inactif' && p.actif) return false;
     if (q) {
       const lq = q.toLowerCase();
       return p.nom_complet.toLowerCase().includes(lq) || p.email.toLowerCase().includes(lq);
     }
     return true;
-  }), [all, q, roleFilter, ipbFilter]);
+  }), [all, q, roleFilter, ipbFilter, statutFilter]);
 
   async function doDeactivate() {
     if (!deactivate) return;
     try {
-      await updateProfileRole(deactivate.id, 'visiteur');
-      await logAction('deactivate', deactivate.nom_complet, `${deactivate.role} → visiteur`);
-      setAll(all.map(x => x.id === deactivate.id ? { ...x, role: 'visiteur' } : x));
+      await setProfileActif(deactivate.id, false);
+      await logAction('deactivate', deactivate.nom_complet, 'compte désactivé (actif → false)');
+      setAll(all.map(x => x.id === deactivate.id ? { ...x, actif: false } : x));
       push(`Compte désactivé : ${deactivate.nom_complet}`);
     } catch { push('Erreur'); }
     setDeactivate(null);
@@ -127,12 +130,16 @@ export default function PageMembres() {
           <option value="super_admin">Super Admin</option>
           <option value="responsable">Responsable</option>
           <option value="membre">Membre</option>
-          <option value="visiteur">Visiteur</option>
         </select>
         <select className="sa-sel" style={{ flex: '0 0 140px' }} value={ipbFilter} onChange={e => setIpbFilter(e.target.value)}>
           <option value="">IPB : tous</option>
           <option value="oui">Étudiant IPB</option>
           <option value="non">Non étudiant</option>
+        </select>
+        <select className="sa-sel" style={{ flex: '0 0 150px' }} value={statutFilter} onChange={e => setStatutFilter(e.target.value)}>
+          <option value="">Statut : tous</option>
+          <option value="actif">Actifs</option>
+          <option value="inactif">Désactivés</option>
         </select>
       </div>
 
@@ -156,7 +163,12 @@ export default function PageMembres() {
                       {p.nom_complet ? p.nom_complet[0].toUpperCase() : '?'}
                     </span>
                   </td>
-                  <td><div className="sa-tprime">{p.nom_complet || '—'}</div></td>
+                  <td>
+                    <div className="sa-tprime">{p.nom_complet || '—'}</div>
+                    {!p.actif && (
+                      <div style={{ fontSize: 11, color: 'var(--sa-red)', fontWeight: 700, marginTop: 2 }}>Compte désactivé</div>
+                    )}
+                  </td>
                   <td><span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 600 }}>{p.email}</span></td>
                   <td style={{ width: 140 }}>
                     <span className={`sa-role ${p.role}`}>{ROLE_LABEL[p.role] ?? p.role}</span>
@@ -173,7 +185,7 @@ export default function PageMembres() {
                     </span>
                   </td>
                   <td style={{ width: 120 }}>
-                    {p.role !== 'visiteur' && p.role !== 'super_admin' && (
+                    {p.actif && p.role !== 'super_admin' && (
                       <button className="sa-btn sa-btn-ghost sa-btn-sm" style={{ color: 'var(--sa-red)', borderColor: 'rgba(203,82,73,.25)' }} onClick={() => setDeactivate(p)}>
                         <AIcon n="trash" size={13} />Désactiver
                       </button>

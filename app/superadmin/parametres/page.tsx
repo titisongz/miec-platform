@@ -1,8 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { supabase } from '@/lib/supabase';
-import { logAction } from '@/lib/admin-queries';
+import { logAction, getParametres, updateParametre } from '@/lib/admin-queries';
 
 function useToasts() {
   const [toasts, setToasts] = useState<{ id: number; msg: string; out?: boolean }[]>([]);
@@ -85,10 +84,8 @@ export default function PageParametres() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabase.from('parametres').select('cle, valeur');
-        if (data) {
-          const map: Record<string, string> = {};
-          data.forEach((r: { cle: string; valeur: string }) => { map[r.cle] = r.valeur; });
+        const map = await getParametres();
+        if (Object.keys(map).length) {
           setS(prev => ({
             ...prev,
             nom_eglise: map.nom_eglise ?? prev.nom_eglise,
@@ -111,8 +108,7 @@ export default function PageParametres() {
   async function save() {
     setSaving(true);
     try {
-      const rows = Object.entries(s).map(([cle, valeur]) => ({ cle, valeur: String(valeur) }));
-      await supabase.from('parametres').upsert(rows, { onConflict: 'cle' });
+      await Promise.all(Object.entries(s).map(([cle, valeur]) => updateParametre(cle, String(valeur))));
       await logAction('settings_update', 'parametres', 'Paramètres globaux mis à jour');
       push('Paramètres enregistrés');
     } catch { push('Erreur lors de la sauvegarde'); }

@@ -477,7 +477,7 @@ export async function getAdminStats() {
 
 export type Profile = {
   id: string; nom_complet: string; email: string;
-  role: string; etudiant_ipb: boolean; created_at: string;
+  role: string; etudiant_ipb: boolean; actif: boolean; created_at: string;
 };
 
 export async function getAllProfiles(roleFilter?: string): Promise<Profile[]> {
@@ -492,6 +492,7 @@ export async function getAllProfiles(roleFilter?: string): Promise<Profile[]> {
     email: p.email ?? '',
     role: p.role ?? 'membre',
     etudiant_ipb: p.etudiant_ipb ?? false,
+    actif: p.actif ?? true,
     created_at: p.created_at ?? '',
   }));
 }
@@ -504,6 +505,14 @@ export async function updateProfileRole(id: string, role: string) {
 export async function setEtudiantIPB(id: string, val: boolean) {
   const { error } = await supabase.from('profiles').update({ etudiant_ipb: val }).eq('id', id);
   if (error) failSupabase('setEtudiantIPB', error);
+}
+
+// Colonne profiles.actif — cf. supabase/fix-compte-actif.sql. Remplace
+// l'ancien updateProfileRole(id, 'visiteur') : 'visiteur' n'existe pas dans
+// l'enum role_utilisateur et faisait échouer la désactivation de compte.
+export async function setProfileActif(id: string, val: boolean) {
+  const { error } = await supabase.from('profiles').update({ actif: val }).eq('id', id);
+  if (error) failSupabase('setProfileActif', error);
 }
 
 export async function getSuperAdminStats() {
@@ -534,7 +543,8 @@ export async function getRecentSignups(days = 7): Promise<Profile[]> {
     .limit(10);
   return ((data as Profile[]) ?? []).map(p => ({
     id: p.id, nom_complet: p.nom_complet ?? '', email: p.email ?? '',
-    role: p.role ?? 'membre', etudiant_ipb: p.etudiant_ipb ?? false, created_at: p.created_at ?? '',
+    role: p.role ?? 'membre', etudiant_ipb: p.etudiant_ipb ?? false,
+    actif: p.actif ?? true, created_at: p.created_at ?? '',
   }));
 }
 
@@ -545,28 +555,58 @@ export type ActionLog = {
   action: string; cible: string; details: string; created_at: string;
 };
 
+// Table public.audit_logs — cf. supabase/fix-audit-logs.sql (colonne
+// actor_id, pas admin_id : le nom de l'auteur est résolu via jointure sur
+// profiles plutôt que dupliqué dans une colonne admin_nom).
+//
+// Best-effort volontaire : une entrée de journal ne doit jamais faire
+// échouer l'action administrative qu'elle enregistre (même logique que les
+// notifications, cf. lib/notifications.ts → safeRpc).
 export async function logAction(action: string, cible: string, details?: string) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return;
-  const { data: profile } = await supabase
-    .from('profiles').select('nom_complet').eq('id', session.user.id).single();
-  await supabase.from('audit_logs').insert({
-    admin_id: session.user.id,
-    admin_nom: profile?.nom_complet ?? 'Super Admin',
-    action, cible, details: details ?? null,
-  });
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { error } = await supabase.from('audit_logs').insert({
+      actor_id: session.user.id,
+      action, cible, details: details ?? null,
+    });
+    if (error) console.warn('[admin-queries] logAction —', error.message);
+  } catch (e) {
+    console.warn('[admin-queries] logAction —', e);
+  }
 }
 
 export async function getActionLogs(limit = 50): Promise<ActionLog[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('audit_logs')
-    .select('id, admin_id, admin_nom, action, cible, details, created_at')
+    .select('id, actor_id, action, cible, details, created_at, actor:profiles!audit_logs_actor_id_fkey(nom_complet)')
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (error) { logSupabaseError('getActionLogs', error); return []; }
   return (data ?? []).map(l => ({
-    id: l.id, admin_id: l.admin_id, admin_nom: l.admin_nom ?? '',
-    action: l.action, cible: l.cible ?? '', details: l.details ?? '', created_at: l.created_at,
+    id: l.id,
+    admin_id: l.actor_id ?? '',
+    admin_nom: (l.actor as { nom_complet?: string } | null)?.nom_complet ?? 'Super Admin',
+    action: l.action,
+    cible: l.cible ?? '',
+    details: (l.details as string | null) ?? '',
+    created_at: l.created_at,
   }));
+}
+
+// ── Super Admin — Paramètres globaux ─────────────────────────────────────────
+// Table public.parametres — cf. supabase/fix-parametres.sql. Modèle clé/valeur,
+// même pattern que ipb_vitrine (cf. getIPBVitrine/updateIPBVitrine).
+
+export async function getParametres(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from('parametres').select('cle, valeur');
+  if (error) { logSupabaseError('getParametres', error); return {}; }
+  return Object.fromEntries((data ?? []).map(r => [r.cle, r.valeur ?? '']));
+}
+
+export async function updateParametre(cle: string, valeur: string) {
+  const { error } = await supabase.from('parametres').upsert({ cle, valeur }, { onConflict: 'cle' });
+  if (error) failSupabase('updateParametre', error);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

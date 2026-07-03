@@ -17,13 +17,6 @@ export async function GET(request: NextRequest) {
   // `next` permet de revenir sur une page précise ; sinon l'accueil.
   const next = searchParams.get('next') ?? '/';
 
-  // Log temporaire (visible dans les logs de fonction Vercel) pour diagnostic.
-  console.log('[auth/callback] params:', {
-    hasCode: !!code,
-    hasTokenHash: !!tokenHash,
-    type,
-  });
-
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

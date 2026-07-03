@@ -10,7 +10,10 @@ import type { IPBCours, IPBProgramme } from '@/lib/types';
 
 type CoursDoc = { id?: string; titre: string; fichier_url?: string; type?: string; file?: File };
 type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string; docs: CoursDoc[]; docsDeleted: string[] };
-type Inscription = { id: string; nom: string; email: string; date: string; statut: string; profile_id?: string };
+type Inscription = {
+  id: string; nom: string; email: string; telephone: string; date: string; statut: string;
+  profile_id?: string; compteNom?: string;
+};
 
 // Extrait un message lisible d'une erreur Supabase (PostgrestError / StorageError)
 // ou d'une Error standard, pour l'afficher tel quel dans un toast.
@@ -430,26 +433,24 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
   useEffect(() => {
     (async () => {
       try {
-        // email vit dans auth.users → on le récupère via la fonction profils_avec_email()
-        const [{ data }, { data: profils }] = await Promise.all([
-          supabase.from('ipb_inscriptions')
-            .select('id, created_at, statut, nom, email, profile:profiles!ipb_inscriptions_profile_id_fkey(id, nom_complet)')
-            .order('created_at', { ascending: false }),
-          supabase.rpc('profils_avec_email'),
-        ]);
-        const emailById = new Map<string, string>(
-          ((profils as { id: string; email: string }[]) ?? []).map(p => [p.id, p.email]),
-        );
+        // Toujours les données SAISIES AU FORMULAIRE (nom/email/telephone) — le
+        // profil lié (si le candidat était connecté) est affiché à part, en
+        // complément, jamais en remplacement (un visiteur peut renseigner un
+        // nom/email différents de son compte).
+        const { data } = await supabase.from('ipb_inscriptions')
+          .select('id, created_at, statut, nom, email, telephone, profile:profiles!ipb_inscriptions_profile_id_fkey(id, nom_complet)')
+          .order('created_at', { ascending: false });
         if (data) setItems(data.map((r: Record<string, unknown>) => {
           const profile = r.profile as { id?: string; nom_complet?: string } | null;
-          // Membre connecté → infos du profil ; visiteur → infos saisies au formulaire.
           return {
             id: r.id as string,
-            nom: profile?.nom_complet ?? (r.nom as string) ?? 'Inconnu',
-            email: (profile?.id ? emailById.get(profile.id) : '') || (r.email as string) || '',
+            nom: (r.nom as string) ?? '',
+            email: (r.email as string) ?? '',
+            telephone: (r.telephone as string) ?? '',
             date: new Date(r.created_at as string).toLocaleDateString('fr-FR'),
             statut: (r.statut as string) ?? 'en_attente',
             profile_id: profile?.id,
+            compteNom: profile?.nom_complet,
           };
         }));
       } catch { /* ignore */ }
@@ -476,12 +477,20 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
   return (
     <Panel accent="ipb" pad={false}>
       <table className="a-tbl">
-        <thead><tr><th>Candidat</th><th>Email</th><th>Date</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th>Candidat</th><th>Email</th><th>Téléphone</th><th>Date</th><th>Statut</th><th></th></tr></thead>
         <tbody>
           {items.map(ins => (
             <tr key={ins.id}>
-              <td><div className="a-tprime">{ins.nom}</div></td>
-              <td><span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 600 }}>{ins.email}</span></td>
+              <td>
+                <div className="a-tprime">{ins.nom || '—'}</div>
+                {ins.profile_id && (
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600, marginTop: 2 }}>
+                    Compte lié : {ins.compteNom || '—'}
+                  </div>
+                )}
+              </td>
+              <td><span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 600 }}>{ins.email || '—'}</span></td>
+              <td><span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 600 }}>{ins.telephone || '—'}</span></td>
               <td style={{ width: 120 }}><span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 600 }}>{ins.date}</span></td>
               <td style={{ width: 120 }}><Badge tone={TONE[ins.statut] ?? 'neutral'} dot>{LABEL[ins.statut] ?? ins.statut}</Badge></td>
               <td style={{ width: 160 }}>

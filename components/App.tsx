@@ -198,9 +198,7 @@ export default function App() {
       if (session) fetchProfile(session.user.id);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Log temporaire de diagnostic — à retirer une fois la confirmation email validée.
-      console.log('[auth] event:', event, '| session:', session ? session.user.email : null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         fetchProfile(session.user.id);
       } else {

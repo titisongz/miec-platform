@@ -386,7 +386,6 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
             {([
               ['Profil personnel', 'user', () => {
                 // Ouvre le ProfileEditor en Sheet (popup) — aucune navigation de route.
-                console.log('[compte] clic « Profil personnel » → ouverture ProfileEditor (Sheet)');
                 setEditOpen(true);
               }],
               ['Confidentialité', 'lock', undefined],
