@@ -27,6 +27,25 @@ function relativeDate(iso: string): string {
   return fmtDate(iso);
 }
 
+// ── Mode maintenance ──────────────────────────────────────────────────────────
+// Table public.parametres (cf. supabase/fix-parametres.sql), clé 'mode_maintenance'.
+// Lu au chargement de l'app (components/App.tsx) avant même la session — en cas
+// d'erreur (table absente, réseau) on considère la plateforme ouverte (false).
+
+export async function getModeMaintenance(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('parametres')
+      .select('valeur')
+      .eq('cle', 'mode_maintenance')
+      .maybeSingle();
+    if (error || !data) return false;
+    return data.valeur === 'true';
+  } catch {
+    return false;
+  }
+}
+
 // ── Verset du jour ────────────────────────────────────────────────────────────
 
 export async function getVerset(): Promise<Verse> {

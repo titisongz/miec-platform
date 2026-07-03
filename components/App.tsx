@@ -1,10 +1,11 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 import Icon from '@/components/icons';
 import { AppBar, FrictionModal, Sheet, Toggle, Spinner, NotificationCenter } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import { supabase } from '@/lib/supabase';
-import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences, updateProfile } from '@/lib/queries';
+import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences, updateProfile, getModeMaintenance } from '@/lib/queries';
 import { notifyNewPriere, notifyNewTemoignage } from '@/lib/notifications';
 import PageAccueil from '@/components/pages/accueil';
 import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/components/pages/modules1';
@@ -47,6 +48,33 @@ function Toast({ msg, accent }: { msg: string; accent: AccentKey }) {
       ...accentStyle(accent),
     }}>
       <Icon n="check" size={16} sw={2.4} style={{ color: '#fff' }} />{msg}
+    </div>
+  );
+}
+
+/* ---------- MaintenanceScreen ---------- */
+function MaintenanceScreen() {
+  return (
+    <div style={{
+      height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', textAlign: 'center', padding: '32px 32px', gap: 20,
+      background: 'var(--bg-soft)',
+    }}>
+      <Image src="/emblem.jpeg" alt="MIEC" width={64} height={64} style={{ objectFit: 'contain', borderRadius: 14 }} />
+      <div style={{
+        width: 56, height: 56, borderRadius: '50%', background: 'var(--brand-slate)',
+        color: '#fff', display: 'grid', placeItems: 'center', boxShadow: 'var(--sh-2)',
+      }}>
+        <Icon n="lock" size={26} sw={2} />
+      </div>
+      <div>
+        <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--ink)', marginBottom: 8 }}>
+          MIEC est en maintenance
+        </div>
+        <p style={{ fontSize: 14.5, color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>
+          Nous revenons très bientôt. Merci de votre patience.
+        </p>
+      </div>
     </div>
   );
 }
@@ -149,6 +177,8 @@ export default function App() {
   const [submit, setSubmit] = useState<FrictionConfig | null>(null);
   const [toast, setToast] = useState<{ msg: string; accent: AccentKey } | null>(null);
   const [ipbTab, setIpbTab] = useState('vitrine');
+  const [maintenance, setMaintenance] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const appRef = useRef<HTMLDivElement>(null);
 
   /* derived auth state */
@@ -202,9 +232,15 @@ export default function App() {
       });
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) fetchProfile(session.user.id);
-    });
+    // Le mode maintenance et la session initiale se chargent en parallèle ;
+    // authReady ne passe à true qu'une fois les deux résolus, pour éviter un
+    // flash de l'app normale avant que l'écran de maintenance ne s'affiche.
+    Promise.all([
+      getModeMaintenance().then(setMaintenance),
+      supabase.auth.getSession().then(({ data: { session } }) => (
+        session ? fetchProfile(session.user.id) : undefined
+      )),
+    ]).finally(() => setAuthReady(true));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
@@ -380,6 +416,9 @@ export default function App() {
   const tabKey = ['accueil', 'recherche', 'priere', 'compte'].includes(view.page) ? view.page : '';
   const isDetail = view.page === 'detail';
   const detailView = view as { page: string; type?: string; item?: unknown };
+  // Le mode maintenance bloque tout le monde sauf super_admin, qui doit
+  // pouvoir se connecter pour le désactiver depuis /superadmin.
+  const showMaintenance = maintenance && role !== 'super_admin';
 
   function renderPage() {
     if (isDetail && detailView.type) {
@@ -438,32 +477,40 @@ export default function App() {
       <div className="phone">
         <div className="notch" />
         <div className="phone-screen">
-          {!isDetail && (
-            <AppBar
-              role={role}
-              initials={initials}
-              unread={unreadCount}
-              onSearch={() => tab('recherche')}
-              onProfile={() => tab('compte')}
-              onBell={openNotifs}
-            />
+          {!authReady ? (
+            <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><Spinner /></div>
+          ) : showMaintenance ? (
+            <MaintenanceScreen />
+          ) : (
+            <>
+              {!isDetail && (
+                <AppBar
+                  role={role}
+                  initials={initials}
+                  unread={unreadCount}
+                  onSearch={() => tab('recherche')}
+                  onProfile={() => tab('compte')}
+                  onBell={openNotifs}
+                />
+              )}
+              <div className="app" ref={appRef}>
+                <div key={`${stack.length}${view.page}${(detailView.type ?? '')}`}>{renderPage()}</div>
+              </div>
+              {!isDetail && (
+                <nav className="tabbar" style={accentStyle('slate')}>
+                  {TABS.map(t => (
+                    <button key={t.k} className={`tab${tabKey === t.k ? ' on' : ''}`} onClick={() => tab(t.k)}>
+                      <span className="tibox"><Icon n={t.i} size={22} /></span>{t.l}
+                    </button>
+                  ))}
+                </nav>
+              )}
+              {toast && <Toast msg={toast.msg} accent={toast.accent} />}
+              {friction && <FrictionModal config={friction} onCreate={frictionCreate} onContinue={() => setFriction(null)} onClose={() => setFriction(null)} />}
+              {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} userId={profile?.id} authorName={profile?.nom_complet} />}
+              {notifOpen && <NotificationCenter items={notifs} loading={notifsLoading} onClose={() => setNotifOpen(false)} onItem={onNotifItem} onMarkAll={markAllNotifs} />}
+            </>
           )}
-          <div className="app" ref={appRef}>
-            <div key={`${stack.length}${view.page}${(detailView.type ?? '')}`}>{renderPage()}</div>
-          </div>
-          {!isDetail && (
-            <nav className="tabbar" style={accentStyle('slate')}>
-              {TABS.map(t => (
-                <button key={t.k} className={`tab${tabKey === t.k ? ' on' : ''}`} onClick={() => tab(t.k)}>
-                  <span className="tibox"><Icon n={t.i} size={22} /></span>{t.l}
-                </button>
-              ))}
-            </nav>
-          )}
-          {toast && <Toast msg={toast.msg} accent={toast.accent} />}
-          {friction && <FrictionModal config={friction} onCreate={frictionCreate} onContinue={() => setFriction(null)} onClose={() => setFriction(null)} />}
-          {submit && <SubmitSheet config={submit} onClose={() => setSubmit(null)} userId={profile?.id} authorName={profile?.nom_complet} />}
-          {notifOpen && <NotificationCenter items={notifs} loading={notifsLoading} onClose={() => setNotifOpen(false)} onItem={onNotifItem} onMarkAll={markAllNotifs} />}
         </div>
       </div>
     </div>
