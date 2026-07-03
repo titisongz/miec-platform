@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { getAllProfiles, updateProfileRole, logAction, type Profile } from '@/lib/admin-queries';
+import { useToasts, ToastHost } from '@/components/superadmin/ui';
 
 // ── 2-step Confirm Modal ───────────────────────────────────────────────────────
 
@@ -53,19 +54,6 @@ function ConfirmModal({
       </div>
     </div>
   );
-}
-
-// ── Toast ──────────────────────────────────────────────────────────────────────
-
-function useToasts() {
-  const [toasts, setToasts] = useState<{ id: number; msg: string; out?: boolean }[]>([]);
-  function push(msg: string) {
-    const id = Date.now();
-    setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, out: true } : x)), 3200);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
-  }
-  return [toasts, push] as const;
 }
 
 // ── Promote modal (search + promote) ─────────────────────────────────────────
@@ -268,13 +256,7 @@ export default function PageResponsables() {
         />
       )}
 
-      <div className="sa-toast-host">
-        {toasts.map(t => (
-          <div key={t.id} className={`sa-toast${t.out ? ' out' : ''}`}>
-            <AIcon n="check" size={16} style={{ color: 'var(--sa-red)' }} />{t.msg}
-          </div>
-        ))}
-      </div>
+      <ToastHost toasts={toasts} />
     </div>
   );
 }

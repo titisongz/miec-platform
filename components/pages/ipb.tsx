@@ -61,6 +61,15 @@ function CourseCard({ c, delay, onOpen }: { c: IPBCours; delay: number; onOpen: 
   );
 }
 
+// Traduit l'erreur Postgres du trigger anti-spam (supabase/fix-anti-spam-ipb.sql,
+// 1 inscription / email / 24h) en message clair ; sinon message générique.
+function mapInscriptionError(msg: string): string {
+  if (msg.includes('déjà été soumise récemment')) {
+    return 'Une inscription avec cet email a déjà été envoyée dans les dernières 24h. Contactez-nous si c\'est une erreur.';
+  }
+  return 'Échec de l\'envoi. Réessayez.';
+}
+
 /* ---------- Inscription form ---------- */
 function InscriptionForm({ onClose, profileId }: { onClose: () => void; profileId?: string }) {
   const [step, setStep] = useState(0);   // 0 = saisie, 1 = envoi, 2 = confirmation
@@ -73,8 +82,8 @@ function InscriptionForm({ onClose, profileId }: { onClose: () => void; profileI
     try {
       await createInscription({ ...f, profile_id: profileId });
       setStep(2);
-    } catch {
-      setErr('Échec de l\'envoi. Réessayez.');
+    } catch (e) {
+      setErr(mapInscriptionError((e as { message?: string })?.message ?? ''));
       setStep(0);
     }
   }

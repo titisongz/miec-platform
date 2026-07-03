@@ -2,17 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import AIcon from '@/components/admin/icon';
 import { getAllProfiles, setProfileActif, setEtudiantIPB, logAction, type Profile } from '@/lib/admin-queries';
-
-function useToasts() {
-  const [toasts, setToasts] = useState<{ id: number; msg: string; out?: boolean }[]>([]);
-  function push(msg: string) {
-    const id = Date.now();
-    setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, out: true } : x)), 3200);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
-  }
-  return [toasts, push] as const;
-}
+import { useToasts, ToastHost } from '@/components/superadmin/ui';
 
 function ConfirmModal({ profile, onClose, onConfirm }: { profile: Profile; onClose: () => void; onConfirm: () => void }) {
   const [checked, setChecked] = useState(false);
@@ -200,13 +190,7 @@ export default function PageMembres() {
 
       {deactivate && <ConfirmModal profile={deactivate} onClose={() => setDeactivate(null)} onConfirm={doDeactivate} />}
 
-      <div className="sa-toast-host">
-        {toasts.map(t => (
-          <div key={t.id} className={`sa-toast${t.out ? ' out' : ''}`}>
-            <AIcon n="check" size={16} style={{ color: 'var(--sa-red)' }} />{t.msg}
-          </div>
-        ))}
-      </div>
+      <ToastHost toasts={toasts} />
     </div>
   );
 }

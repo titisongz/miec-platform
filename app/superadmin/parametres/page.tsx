@@ -2,17 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
 import { logAction, getParametres, updateParametre } from '@/lib/admin-queries';
-
-function useToasts() {
-  const [toasts, setToasts] = useState<{ id: number; msg: string; out?: boolean }[]>([]);
-  function push(msg: string) {
-    const id = Date.now();
-    setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, out: true } : x)), 3200);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
-  }
-  return [toasts, push] as const;
-}
+import { useToasts, ToastHost, Toggle } from '@/components/superadmin/ui';
 
 type Settings = {
   nom_eglise: string;
@@ -39,15 +29,6 @@ const DEFAULTS: Settings = {
   module_newsletter: true,
   mode_maintenance: false,
 };
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="sa-toggle">
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
-      <span className="tk" />
-    </label>
-  );
-}
 
 function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
@@ -183,13 +164,7 @@ export default function PageParametres() {
         </div>
       </div>
 
-      <div className="sa-toast-host">
-        {toasts.map(t => (
-          <div key={t.id} className={`sa-toast${t.out ? ' out' : ''}`}>
-            <AIcon n="check" size={16} style={{ color: 'var(--sa-red)' }} />{t.msg}
-          </div>
-        ))}
-      </div>
+      <ToastHost toasts={toasts} />
     </div>
   );
 }

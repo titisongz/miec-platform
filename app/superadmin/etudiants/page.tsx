@@ -3,17 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import AIcon from '@/components/admin/icon';
 import { getAllProfiles, setEtudiantIPB, logAction, type Profile } from '@/lib/admin-queries';
 import { supabase } from '@/lib/supabase';
-
-function useToasts() {
-  const [toasts, setToasts] = useState<{ id: number; msg: string; out?: boolean }[]>([]);
-  function push(msg: string) {
-    const id = Date.now();
-    setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, out: true } : x)), 3200);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
-  }
-  return [toasts, push] as const;
-}
+import { useToasts, ToastHost } from '@/components/superadmin/ui';
 
 type Enrollment = { profile_id: string; cours_code: string; cours_titre: string; created_at: string };
 
@@ -172,13 +162,7 @@ export default function PageEtudiants() {
         </>
       )}
 
-      <div className="sa-toast-host">
-        {toasts.map(t => (
-          <div key={t.id} className={`sa-toast${t.out ? ' out' : ''}`}>
-            <AIcon n="check" size={16} style={{ color: 'var(--sa-red)' }} />{t.msg}
-          </div>
-        ))}
-      </div>
+      <ToastHost toasts={toasts} />
     </div>
   );
 }
