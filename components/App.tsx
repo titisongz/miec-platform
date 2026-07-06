@@ -12,7 +12,7 @@ import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/
 import { PageRessources, PageLibrairie, PageEvangelisation } from '@/components/pages/modules2';
 import PageIPB from '@/components/pages/ipb';
 import PageRecherche from '@/components/pages/recherche';
-import PageCompte from '@/components/pages/compte';
+import PageCompte, { AuthScreen } from '@/components/pages/compte';
 import {
   DEnseignement, DTemoignage, DAnnonce, DSortie, DLivre, DPriere, DDoc, DRessource,
 } from '@/components/details';
@@ -53,7 +53,13 @@ function Toast({ msg, accent }: { msg: string; accent: AccentKey }) {
 }
 
 /* ---------- MaintenanceScreen ---------- */
-function MaintenanceScreen() {
+// Écran bloquant affiché à tout le monde sauf super_admin. Il embarque ses
+// propres échappatoires : un super_admin bloqué par erreur peut toujours se
+// déconnecter (s'il a une session) ou rejoindre l'écran de connexion (sinon),
+// sans dépendre du reste de l'interface qui n'est pas rendu ici.
+function MaintenanceScreen({ hasSession, onLogout, onAdminLogin }: {
+  hasSession: boolean; onLogout: () => void; onAdminLogin: () => void;
+}) {
   return (
     <div style={{
       height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -74,6 +80,31 @@ function MaintenanceScreen() {
         <p style={{ fontSize: 14.5, color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>
           Nous revenons très bientôt. Merci de votre patience.
         </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, marginTop: 4 }}>
+        {hasSession && (
+          <button
+            onClick={onLogout}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px',
+              borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--line-2)',
+              color: 'var(--ink)', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: 'var(--sh-1)',
+            }}
+          >
+            <Icon n="logout" size={16} sw={2} />Se déconnecter
+          </button>
+        )}
+        <button
+          onClick={onAdminLogin}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)',
+            textDecoration: 'underline', textUnderlineOffset: 3,
+          }}
+        >
+          Connexion administrateur
+        </button>
       </div>
     </div>
   );
@@ -179,6 +210,15 @@ export default function App() {
   const [ipbTab, setIpbTab] = useState('vitrine');
   const [maintenance, setMaintenance] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  // `profileLoading` : une session existe mais son profil (donc son rôle) n'est
+  // pas encore chargé. Tant qu'il est vrai on n'ose PAS décider du mode
+  // maintenance, sinon un super_admin verrait l'écran de maintenance avant que
+  // son rôle réel soit connu (race condition réseau).
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  // Force l'affichage de l'écran de connexion par-dessus la maintenance, pour
+  // qu'un super_admin sans session puisse quand même s'authentifier.
+  const [adminLogin, setAdminLogin] = useState(false);
   const appRef = useRef<HTMLDivElement>(null);
 
   /* derived auth state */
@@ -191,31 +231,38 @@ export default function App() {
 
   /* ── Supabase auth ────────────────────────────────────────────────── */
   async function fetchProfile(userId: string) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, nom_complet, telephone_whatsapp, role, etudiant_ipb, actif, notif_email, notif_whatsapp')
-      .eq('id', userId)
-      .maybeSingle();
+    // Marque le profil comme « en cours de chargement » AVANT tout await : la
+    // décision maintenance est suspendue tant que le rôle réel n'est pas connu.
+    setProfileLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nom_complet, telephone_whatsapp, role, etudiant_ipb, actif, notif_email, notif_whatsapp')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error) {
-      console.error('[auth] fetchProfile error:', error.message);
-      return;
+      if (error) {
+        console.error('[auth] fetchProfile error:', error.message);
+        return;
+      }
+      if (!data) {
+        console.warn('[auth] aucune ligne profile pour', userId, '— le trigger handle_new_user a-t-il bien créé le profil ?');
+        return;
+      }
+      const p = data as UserProfile;
+      // Compte désactivé (super admin → /superadmin/membres) : on ne laisse
+      // jamais une session active se traduire par un profil chargé, même si
+      // le JWT reste valide quelques minutes côté Supabase.
+      if (p.actif === false) {
+        await supabase.auth.signOut();
+        setToast({ msg: 'Votre compte a été désactivé. Contactez un responsable.', accent: 'tem' });
+        return;
+      }
+      setProfile(p);
+      setNotif({ email: p.notif_email ?? true, whatsapp: p.notif_whatsapp ?? false });
+    } finally {
+      setProfileLoading(false);
     }
-    if (!data) {
-      console.warn('[auth] aucune ligne profile pour', userId, '— le trigger handle_new_user a-t-il bien créé le profil ?');
-      return;
-    }
-    const p = data as UserProfile;
-    // Compte désactivé (super admin → /superadmin/membres) : on ne laisse
-    // jamais une session active se traduire par un profil chargé, même si
-    // le JWT reste valide quelques minutes côté Supabase.
-    if (p.actif === false) {
-      await supabase.auth.signOut();
-      setToast({ msg: 'Votre compte a été désactivé. Contactez un responsable.', accent: 'tem' });
-      return;
-    }
-    setProfile(p);
-    setNotif({ email: p.notif_email ?? true, whatsapp: p.notif_whatsapp ?? false });
   }
 
   useEffect(() => {
@@ -237,12 +284,14 @@ export default function App() {
     // flash de l'app normale avant que l'écran de maintenance ne s'affiche.
     Promise.all([
       getModeMaintenance().then(setMaintenance),
-      supabase.auth.getSession().then(({ data: { session } }) => (
-        session ? fetchProfile(session.user.id) : undefined
-      )),
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setHasSession(!!session);
+        return session ? fetchProfile(session.user.id) : undefined;
+      }),
     ]).finally(() => setAuthReady(true));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(!!session);
       if (session) {
         fetchProfile(session.user.id);
       } else {
@@ -409,6 +458,7 @@ export default function App() {
   }
   async function handleLogout() {
     await supabase.auth.signOut();
+    setAdminLogin(false);
     tab('accueil');
   }
 
@@ -419,6 +469,10 @@ export default function App() {
   // Le mode maintenance bloque tout le monde sauf super_admin, qui doit
   // pouvoir se connecter pour le désactiver depuis /superadmin.
   const showMaintenance = maintenance && role !== 'super_admin';
+  // On ne montre RIEN de définitif tant que l'auth n'est pas prête OU qu'un
+  // profil est en cours de chargement : décider de la maintenance sur un rôle
+  // encore inconnu (visiteur par défaut) bloquerait un super_admin par erreur.
+  const booting = !authReady || profileLoading;
 
   function renderPage() {
     if (isDetail && detailView.type) {
@@ -477,10 +531,14 @@ export default function App() {
       <div className="phone">
         <div className="notch" />
         <div className="phone-screen">
-          {!authReady ? (
+          {booting ? (
             <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><Spinner /></div>
           ) : showMaintenance ? (
-            <MaintenanceScreen />
+            adminLogin ? (
+              <div className="app"><AuthScreen onLogin={() => setAdminLogin(false)} /></div>
+            ) : (
+              <MaintenanceScreen hasSession={hasSession} onLogout={handleLogout} onAdminLogin={() => setAdminLogin(true)} />
+            )
           ) : (
             <>
               {!isDetail && (
