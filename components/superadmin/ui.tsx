@@ -12,15 +12,19 @@ import AIcon from '@/components/admin/icon';
 
 // ── Toasts ────────────────────────────────────────────────────────────────
 
-export interface SAToast { id: number; msg: string; out?: boolean }
+export type SAToastVariant = 'ok' | 'err';
+export interface SAToast { id: number; msg: string; out?: boolean; variant: SAToastVariant }
 
-export function useToasts(): readonly [SAToast[], (msg: string) => void] {
+export function useToasts(): readonly [SAToast[], (msg: string, variant?: SAToastVariant) => void] {
   const [toasts, setToasts] = useState<SAToast[]>([]);
-  function push(msg: string) {
+  function push(msg: string, variant: SAToastVariant = 'ok') {
     const id = Date.now();
-    setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, out: true } : x)), 3200);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
+    setToasts(t => [...t, { id, msg, variant }]);
+    // Les erreurs restent affichées plus longtemps : le message Supabase exact
+    // doit avoir le temps d'être lu par le super admin.
+    const ttl = variant === 'err' ? 6500 : 3200;
+    setTimeout(() => setToasts(t => t.map(x => x.id === id ? { ...x, out: true } : x)), ttl);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), ttl + 300);
   }
   return [toasts, push] as const;
 }
@@ -28,11 +32,14 @@ export function useToasts(): readonly [SAToast[], (msg: string) => void] {
 export function ToastHost({ toasts }: { toasts: SAToast[] }) {
   return (
     <div className="sa-toast-host">
-      {toasts.map(t => (
-        <div key={t.id} className={`sa-toast${t.out ? ' out' : ''}`}>
-          <AIcon n="check" size={16} style={{ color: 'var(--sa-red)' }} />{t.msg}
-        </div>
-      ))}
+      {toasts.map(t => {
+        const err = t.variant === 'err';
+        return (
+          <div key={t.id} className={`sa-toast${err ? ' err' : ''}${t.out ? ' out' : ''}`}>
+            <AIcon n={err ? 'info' : 'check'} size={16} style={{ color: err ? '#fff' : 'var(--sa-red)', flexShrink: 0 }} />{t.msg}
+          </div>
+        );
+      })}
     </div>
   );
 }

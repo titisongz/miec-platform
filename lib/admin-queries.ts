@@ -605,8 +605,9 @@ export async function getParametres(): Promise<Record<string, string>> {
 }
 
 export async function updateParametre(cle: string, valeur: string) {
-  const { error } = await supabase.from('parametres').upsert({ cle, valeur }, { onConflict: 'cle' });
+  const { data, error } = await supabase.from('parametres').upsert({ cle, valeur }, { onConflict: 'cle' }).select();
   if (error) failSupabase('updateParametre', error);
+  return data;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

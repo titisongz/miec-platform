@@ -590,7 +590,15 @@
   box-shadow: 0 8px 30px rgba(0,0,0,.25);
   border-left: 3px solid var(--sa-red);
   pointer-events: auto;
+  max-width: 400px;
   animation: sa-toast-in .3s var(--ease-out);
+}
+/* Variante erreur : fond rempli rouge, message multi-lignes autorisé
+   (les messages d'erreur Supabase peuvent être longs). */
+.sa-toast.err {
+  background: #dc2626; color: #fff;
+  border-left-color: #7f1d1d;
+  align-items: flex-start; line-height: 1.4;
 }
 .sa-toast.out { animation: sa-toast-out .25s var(--ease) forwards; }
 @keyframes sa-toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
