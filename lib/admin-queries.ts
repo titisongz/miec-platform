@@ -9,12 +9,13 @@ import { notifyNewAnnonce, notifyNewEnseignement, notifyNewSortie, notifyTemoign
 // relance. `never` indique à TypeScript que l'appel interrompt le flux, ce qui
 // permet d'écrire `if (error) failSupabase(...)` et de narrower `error` à null.
 function failSupabase(ctx: string, error: PostgrestError): never {
-  console.error(`[admin-queries] ${ctx} — échec Supabase:`, {
-    message: error.message,
-    code: error.code,
-    details: error.details,
-    hint: error.hint,
-  });
+  // Message EXACT dans la chaîne (et pas seulement dans un objet, que la console
+  // replie en « Object ») + détail structuré à la suite.
+  console.error(
+    `[admin-queries] ${ctx} — échec Supabase: ${error.message}` +
+      (error.code ? ` (code ${error.code})` : ''),
+    { message: error.message, code: error.code, details: error.details, hint: error.hint },
+  );
   throw error;
 }
 
@@ -150,17 +151,37 @@ export async function upsertVerset(texte: string, reference: string, medit?: str
 export async function createEnseignement(data: {
   titre: string; auteur: string; date: string; serie_id?: string;
   theme?: string; youtube_id?: string; texte?: string; type?: string;
-}) {
-  const { error } = await supabase.from('enseignements').insert({
+}): Promise<Enseignement> {
+  // .select().single() : on récupère la ligne RÉELLEMENT créée (avec son vrai
+  // UUID), pour que la liste locale n'affiche jamais d'id temporaire — sinon une
+  // édition juste après la création enverrait un update sur un id bidon (400).
+  const { data: row, error } = await supabase.from('enseignements').insert({
     titre: data.titre, intervenant: data.auteur,
     date: data.date || null, serie_id: data.serie_id || null,
     theme: data.theme || null, youtube_id: data.youtube_id || null,
     // enum type_enseignement = ('video','texte') — surtout PAS 'text'.
     texte: data.texte || null, type: data.type || 'texte',
     created_by: await authorId(),
-  });
+  })
+    .select(`id, titre, intervenant, date, youtube_id, type, numero, total_serie, theme, texte, serie:series(id, titre)`)
+    .single();
   if (error) failSupabase('createEnseignement', error);
   notifyNewEnseignement(data.titre); // best-effort : notifie tous les membres
+  return {
+    id: row.id,
+    serie: (row.serie as { titre?: string } | null)?.titre ?? '',
+    titre: row.titre,
+    auteur: row.intervenant ?? '',
+    date: row.date ?? '',
+    duree: '',
+    type: row.type === 'video' ? 'video' : 'texte',
+    yt: row.youtube_id ?? undefined,
+    theme: row.theme ?? '',
+    n: row.numero ?? 1,
+    total: row.total_serie ?? 1,
+    excerpt: row.texte ? row.texte.slice(0, 200) : '',
+    texte: row.texte ?? '',
+  };
 }
 
 export async function updateEnseignement(id: string, data: Partial<{

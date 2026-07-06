@@ -123,13 +123,21 @@ export default function PageEnseignements() {
         setItems(items.map(it => it.id === f.id ? { ...it, ...f, yt: f.yt || undefined } : it));
         pushToast('Enseignement mis à jour', 'ens');
       } else {
-        await createEnseignement({ titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serieId, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
-        const newItem: Enseignement = { id: 'tmp-' + Date.now(), serie: f.serie, titre: f.titre, auteur: f.auteur, date: f.date, duree: '—', type: f.yt ? 'video' : 'texte', yt: f.yt || undefined, theme: f.theme, n: 1, total: 1, excerpt: f.excerpt };
-        setItems([newItem, ...items]);
+        // On insère l'objet RÉEL renvoyé par Supabase (vrai UUID) dans la liste,
+        // au lieu d'un id temporaire — indispensable pour qu'une édition juste
+        // après création cible la bonne ligne.
+        const created = await createEnseignement({ titre: f.titre, auteur: f.auteur, date: f.date, serie_id: serieId, theme: f.theme, youtube_id: f.yt, texte: f.excerpt, type: f.yt ? 'video' : 'texte' });
+        setItems([created, ...items]);
         pushToast('Enseignement publié', 'ens');
       }
-    } catch {
-      pushToast('Erreur lors de la sauvegarde', 'tem');
+    } catch (e) {
+      const err = e as { message?: string; code?: string; details?: string; hint?: string };
+      console.error(
+        `[admin/enseignements] échec sauvegarde: ${err.message ?? String(e)}` +
+          (err.code ? ` (code ${err.code})` : ''),
+        { message: err.message, code: err.code, details: err.details, hint: err.hint },
+      );
+      pushToast(`Erreur : ${err.message ?? 'sauvegarde impossible'}`, 'tem');
     }
     setModal(null);
   }
