@@ -8,6 +8,13 @@ out/
 # env files (contain secrets)
 .env.local
 .env*.local
+.env.e2e
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # vercel
 .vercel
