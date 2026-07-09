@@ -5,6 +5,14 @@ node_modules/
 .next/
 out/
 
+# PWA — service worker généré par next-pwa au build
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/fallback-*.js
+public/worker-*.js
+
 # env files (contain secrets)
 .env.local
 .env*.local
