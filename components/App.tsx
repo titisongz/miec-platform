@@ -440,23 +440,24 @@ export default function App() {
   // Bascule « Je prie pour ce sujet ». Persiste dans prie_par (le compteur
   // partagé est recalculé par un trigger côté base, donc visible par toute la
   // communauté et le panel admin). Mise à jour optimiste + rollback sur échec.
-  // Renvoie true si l'opération a réussi, pour que la vue puisse réconcilier le
-  // compteur affiché. Un visiteur non connecté garde un basculement local
-  // uniquement (données de démonstration, aucune écriture possible).
-  async function pray(id: string): Promise<boolean> {
+  // Renvoie { ok, count } — count est la valeur exacte relue en base juste
+  // après le toggle, pour que la vue affiche le vrai total partagé plutôt
+  // qu'un simple +1/-1 local. Un visiteur non connecté garde un basculement
+  // local uniquement (données de démonstration, aucune écriture possible).
+  async function pray(id: string): Promise<{ ok: boolean; count?: number }> {
     const wasOn = prayed.includes(id);
     setPrayed(p => wasOn ? p.filter(x => x !== id) : [...p, id]);
     if (!wasOn) setToast({ msg: 'Merci, vous priez 🙏', accent: 'pri' });
 
-    if (!profile?.id) return true;   // démo : basculement local, pas de persistance
+    if (!profile?.id) return { ok: true };   // démo : basculement local, pas de persistance
 
     try {
-      await togglePriere(id, profile.id);
-      return true;
+      const { count } = await togglePriere(id, profile.id);
+      return { ok: true, count };
     } catch {
       setPrayed(p => wasOn ? [...p, id] : p.filter(x => x !== id));   // rollback
       setToast({ msg: 'Action impossible, réessayez.', accent: 'tem' });
-      return false;
+      return { ok: false };
     }
   }
 

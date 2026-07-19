@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { PostgrestError } from '@supabase/supabase-js';
 import type { Enseignement, Serie, Annonce, Sortie } from './types';
 import { notifyNewAnnonce, notifyNewEnseignement, notifyNewSortie, notifyTemoignageValide } from './notifications';
+import { getParticipantsCountMap } from './queries';
 
 // ── Helpers communs ───────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ export async function getSortiesAdmin(): Promise<Sortie[]> {
     .select('*, rapports:rapports_sorties(taille_equipe, contacts, decisions)')
     .order('date', { ascending: false });
   if (error) { logSupabaseError('getSortiesAdmin', error); return []; }
+  const participants = await getParticipantsCountMap((data ?? []).map(s => s.id));
   return (data ?? []).map(s => {
     const rapport = (s.rapports as { taille_equipe?: number; contacts?: number; decisions?: number }[] | null)?.[0];
     return {
@@ -107,6 +109,7 @@ export async function getSortiesAdmin(): Promise<Sortie[]> {
       statut: s.statut,
       theme: s.theme ?? '',
       equipe: rapport?.taille_equipe ?? 0,
+      participants: participants[s.id] ?? 0,
       contacts: rapport?.contacts ?? undefined,
       decisions: rapport?.decisions ?? undefined,
       full: s.programme ?? '',

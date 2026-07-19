@@ -328,19 +328,21 @@ export function DLivre({ item: b, back, fav, onFav }: {
 
 /* ---------- Prière ---------- */
 export function DPriere({ item: p, back, prayed, onPray }: {
-  item: Priere; back: () => void; prayed: string[]; onPray: (id: string) => Promise<boolean>;
+  item: Priere; back: () => void; prayed: string[]; onPray: (id: string) => Promise<{ ok: boolean; count?: number }>;
 }) {
   const on = prayed.includes(p.id);
   // p.prie (compteur_prie) est le total partagé maintenu en base ; on le suit
-  // localement pour la mise à jour optimiste, réconciliée si l'écriture échoue.
+  // localement pour la mise à jour optimiste, réconciliée avec la valeur
+  // relue en base après le clic (ou rollback si l'écriture échoue).
   const [count, setCount] = useState(p.prie);
   useEffect(() => { setCount(p.prie); }, [p.id, p.prie]);
 
   async function pray() {
     const wasOn = prayed.includes(p.id);
     setCount(c => Math.max(0, c + (wasOn ? -1 : 1)));
-    const ok = await onPray(p.id);
-    if (!ok) setCount(c => Math.max(0, c + (wasOn ? 1 : -1)));
+    const { ok, count: real } = await onPray(p.id);
+    if (!ok) { setCount(c => Math.max(0, c + (wasOn ? 1 : -1))); return; }
+    if (real !== undefined) setCount(real);
   }
 
   return (

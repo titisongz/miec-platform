@@ -191,7 +191,7 @@ export function PageAnnonces({ onOpen }: { onOpen: (t: string, i: unknown) => vo
 export function PagePriere({ role, onOpen, onSubmit, prayed, onPray }: {
   role: string; onOpen: (t: string, i: unknown) => void;
   onSubmit: (cfg: FrictionConfig) => void;
-  prayed: string[]; onPray: (id: string) => Promise<boolean>;
+  prayed: string[]; onPray: (id: string) => Promise<{ ok: boolean; count?: number }>;
 }) {
   const [all, setAll] = useState<Priere[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,15 +202,17 @@ export function PagePriere({ role, onOpen, onSubmit, prayed, onPray }: {
     getPrieres().then(data => { setAll(data); setLoading(false); });
   }, []);
 
-  // Bascule le sujet : le compteur partagé est mis à jour de façon optimiste
-  // (±1) dans la liste, puis réconcilié si la persistance échoue.
+  // Bascule le sujet : mise à jour optimiste (±1) le temps de la requête, puis
+  // réconciliation avec le vrai compteur partagé relu en base (ou rollback si
+  // la persistance échoue).
   async function pray(id: string) {
     const wasOn = prayed.includes(id);
     const bump = (d: number) => setAll(list => list.map(p =>
       p.id === id ? { ...p, prie: Math.max(0, p.prie + d) } : p));
     bump(wasOn ? -1 : 1);
-    const ok = await onPray(id);
-    if (!ok) bump(wasOn ? 1 : -1);
+    const { ok, count } = await onPray(id);
+    if (!ok) { bump(wasOn ? 1 : -1); return; }
+    if (count !== undefined) setAll(list => list.map(p => p.id === id ? { ...p, prie: count } : p));
   }
 
   const cats = ['Tous', ...Array.from(new Set(all.map(p => p.cat).filter(Boolean)))];

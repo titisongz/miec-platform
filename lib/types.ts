@@ -88,6 +88,9 @@ export interface Livre {
 export interface Sortie {
   id: string; titre: string; date: string; heure: string;
   statut: string; theme: string; equipe: number;
+  // Nombre réel d'inscrits (table participations_sorties), distinct de `equipe`
+  // (taille d'équipe saisie par l'admin/le rapport).
+  participants?: number;
   contacts?: number; decisions?: number; full: string; photos?: string[];
 }
 

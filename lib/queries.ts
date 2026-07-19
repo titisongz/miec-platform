@@ -266,10 +266,12 @@ export async function getPrayedPriereIds(profile_id: string): Promise<string[]> 
 
 /**
  * Ajoute / retire l'utilisateur des intercesseurs d'un sujet, selon l'état
- * actuel en base. Renvoie le nouvel état (true = prie désormais). Le compteur
- * partagé est recalculé automatiquement par le trigger. Lève en cas d'échec.
+ * actuel en base. Le compteur partagé (compteur_prie) est recalculé
+ * automatiquement par le trigger côté base ; on le relit ici pour renvoyer
+ * la valeur exacte et permettre à l'UI de se réconcilier au lieu de se fier
+ * à un simple +1/-1 local. Lève en cas d'échec.
  */
-export async function togglePriere(priere_id: string, profile_id: string): Promise<boolean> {
+export async function togglePriere(priere_id: string, profile_id: string): Promise<{ on: boolean; count: number }> {
   const { data } = await supabase
     .from('prie_par')
     .select('priere_id')
@@ -277,19 +279,28 @@ export async function togglePriere(priere_id: string, profile_id: string): Promi
     .eq('profile_id', profile_id)
     .maybeSingle();
 
+  let on: boolean;
   if (data) {
     const { error } = await supabase
       .from('prie_par')
       .delete()
       .match({ priere_id, profile_id });
     if (error) throw error;
-    return false;
+    on = false;
+  } else {
+    const { error } = await supabase
+      .from('prie_par')
+      .insert({ priere_id, profile_id });
+    if (error) throw error;
+    on = true;
   }
-  const { error } = await supabase
-    .from('prie_par')
-    .insert({ priere_id, profile_id });
-  if (error) throw error;
-  return true;
+
+  const { data: row } = await supabase
+    .from('prieres')
+    .select('compteur_prie')
+    .eq('id', priere_id)
+    .single();
+  return { on, count: row?.compteur_prie ?? 0 };
 }
 
 // ── Ressources ────────────────────────────────────────────────────────────────
@@ -365,6 +376,8 @@ export async function getSorties(): Promise<Sortie[]> {
 
     if (error || !data?.length) return DB.SORTIES;
 
+    const participants = await getParticipantsCountMap(data.map(s => s.id));
+
     return data.map(s => {
       const rapport = (s.rapports as { taille_equipe?: number; contacts?: number; decisions?: number }[] | null)?.[0];
       return {
@@ -375,6 +388,7 @@ export async function getSorties(): Promise<Sortie[]> {
         statut: s.statut,
         theme: s.theme ?? '',
         equipe: rapport?.taille_equipe ?? 0,
+        participants: participants[s.id] ?? 0,
         contacts: rapport?.contacts ?? undefined,
         decisions: rapport?.decisions ?? undefined,
         full: s.programme ?? '',
@@ -416,6 +430,22 @@ export async function getParticipantsCount(sortie_id: string): Promise<number> {
     return count ?? 0;
   } catch {
     return 0;
+  }
+}
+
+/** Nombre de participants pour plusieurs sorties en une seule requête (listes). */
+export async function getParticipantsCountMap(sortie_ids: string[]): Promise<Record<string, number>> {
+  if (!sortie_ids.length) return {};
+  try {
+    const { data } = await supabase
+      .from('participations_sorties')
+      .select('sortie_id')
+      .in('sortie_id', sortie_ids);
+    const counts: Record<string, number> = {};
+    (data ?? []).forEach(r => { counts[r.sortie_id] = (counts[r.sortie_id] ?? 0) + 1; });
+    return counts;
+  } catch {
+    return {};
   }
 }
 
@@ -801,6 +831,8 @@ export async function searchSorties(query: string): Promise<Sortie[]> {
 
     if (error || !data) return [];
 
+    const participants = await getParticipantsCountMap(data.map(s => s.id));
+
     return data.map(s => {
       const rapport = (s.rapports as { taille_equipe?: number; contacts?: number; decisions?: number }[] | null)?.[0];
       return {
@@ -811,6 +843,7 @@ export async function searchSorties(query: string): Promise<Sortie[]> {
         statut: s.statut,
         theme: s.theme ?? '',
         equipe: rapport?.taille_equipe ?? 0,
+        participants: participants[s.id] ?? 0,
         contacts: rapport?.contacts ?? undefined,
         decisions: rapport?.decisions ?? undefined,
         full: s.programme ?? '',

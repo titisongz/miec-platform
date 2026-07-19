@@ -141,7 +141,7 @@ export function PageEvangelisation({ onOpen }: { onOpen: (t: string, i: unknown)
                   <div style={{ padding: 15, flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: 7, marginBottom: 8 }}><Tag c="eva" icon="sparkle">{s.theme}</Tag></div>
                     <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-.01em', lineHeight: 1.2, marginBottom: 7 }}>{hl(s.titre, q)}</div>
-                    <div className="metaline" style={{ fontSize: 12 }}><Icon n="clock" size={13} /><span>{s.heure}</span><span className="md" /><Icon n="users" size={13} /><span>{s.equipe} équipiers</span></div>
+                    <div className="metaline" style={{ fontSize: 12 }}><Icon n="clock" size={13} /><span>{s.heure}</span><span className="md" /><Icon n="users" size={13} /><span>{s.participants ?? 0} participant{(s.participants ?? 0) > 1 ? 's' : ''}</span></div>
                   </div>
                 </div>
               </button>

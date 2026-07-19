@@ -183,6 +183,7 @@ export default function PageEvangelisation() {
               </div>
               <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 {s.equipe > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', flex: 1 }}><AIcon n="group" size={13} /> {s.equipe} membres</span>}
+                <Badge tone="blue" icon="users">{s.participants ?? 0} inscrit{(s.participants ?? 0) > 1 ? 's' : ''}</Badge>
                 {(s.contacts ?? 0) > 0 && <Badge tone="blue">{s.contacts} contacts</Badge>}
                 {(s.decisions ?? 0) > 0 && <Badge tone="green" dot>{s.decisions} décisions</Badge>}
                 {s.statut === 'passee' && !s.contacts && (
