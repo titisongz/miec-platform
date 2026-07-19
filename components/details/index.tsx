@@ -328,10 +328,21 @@ export function DLivre({ item: b, back, fav, onFav }: {
 
 /* ---------- Prière ---------- */
 export function DPriere({ item: p, back, prayed, onPray }: {
-  item: Priere; back: () => void; prayed: string[]; onPray: (id: string) => void;
+  item: Priere; back: () => void; prayed: string[]; onPray: (id: string) => Promise<boolean>;
 }) {
   const on = prayed.includes(p.id);
-  const count = p.prie + (on ? 1 : 0);
+  // p.prie (compteur_prie) est le total partagé maintenu en base ; on le suit
+  // localement pour la mise à jour optimiste, réconciliée si l'écriture échoue.
+  const [count, setCount] = useState(p.prie);
+  useEffect(() => { setCount(p.prie); }, [p.id, p.prie]);
+
+  async function pray() {
+    const wasOn = prayed.includes(p.id);
+    setCount(c => Math.max(0, c + (wasOn ? -1 : 1)));
+    const ok = await onPray(p.id);
+    if (!ok) setCount(c => Math.max(0, c + (wasOn ? 1 : -1)));
+  }
+
   return (
     <div className="screen slidein" style={{ ...accentStyle('pri'), paddingBottom: 40 }}>
       <DetailTop back={back} label="Sujet de prière" />
@@ -348,8 +359,10 @@ export function DPriere({ item: p, back, prayed, onPray }: {
         <p className="muted" style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 22 }}>{p.full}</p>
         <div style={{ background: 'var(--c-t)', borderRadius: 16, padding: 18, textAlign: 'center' }}>
           <div style={{ fontWeight: 800, fontSize: 22, color: 'var(--c-i)', letterSpacing: '-.02em' }}>{count}</div>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>personnes prient pour ce sujet</div>
-          <button className="btn btn-block btn-primary" onClick={() => onPray(p.id)} style={{ opacity: on ? .7 : 1 }}>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
+            {count > 1 ? 'personnes prient pour ce sujet' : 'personne prie pour ce sujet'}
+          </div>
+          <button className="btn btn-block btn-primary" onClick={pray} style={{ opacity: on ? .7 : 1 }}>
             <Icon n="flame" size={18} sw={2} />{on ? 'Vous priez 🙏' : 'Je prie pour ce sujet'}
           </button>
         </div>

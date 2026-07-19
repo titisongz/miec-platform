@@ -245,6 +245,53 @@ export async function getPrieres(categorie?: string): Promise<Priere[]> {
   }
 }
 
+// ── Prières — « Je prie pour ce sujet » (table prie_par) ──────────────────────
+// Persistance activée par supabase/fix-prieres-je-prie.sql. Le compteur partagé
+// (prieres.compteur_prie) est maintenu côté base par un trigger sur prie_par ;
+// côté client on ne gère que l'appartenance de l'utilisateur (bouton).
+
+/** Ids des sujets pour lesquels l'utilisateur a cliqué « Je prie ». */
+export async function getPrayedPriereIds(profile_id: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('prie_par')
+      .select('priere_id')
+      .eq('profile_id', profile_id);
+    if (error || !data) return [];
+    return data.map(r => r.priere_id as string);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Ajoute / retire l'utilisateur des intercesseurs d'un sujet, selon l'état
+ * actuel en base. Renvoie le nouvel état (true = prie désormais). Le compteur
+ * partagé est recalculé automatiquement par le trigger. Lève en cas d'échec.
+ */
+export async function togglePriere(priere_id: string, profile_id: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('prie_par')
+    .select('priere_id')
+    .eq('priere_id', priere_id)
+    .eq('profile_id', profile_id)
+    .maybeSingle();
+
+  if (data) {
+    const { error } = await supabase
+      .from('prie_par')
+      .delete()
+      .match({ priere_id, profile_id });
+    if (error) throw error;
+    return false;
+  }
+  const { error } = await supabase
+    .from('prie_par')
+    .insert({ priere_id, profile_id });
+  if (error) throw error;
+  return true;
+}
+
 // ── Ressources ────────────────────────────────────────────────────────────────
 
 const FMT_MAP: Record<string, string> = {

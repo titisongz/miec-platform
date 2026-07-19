@@ -191,7 +191,7 @@ export function PageAnnonces({ onOpen }: { onOpen: (t: string, i: unknown) => vo
 export function PagePriere({ role, onOpen, onSubmit, prayed, onPray }: {
   role: string; onOpen: (t: string, i: unknown) => void;
   onSubmit: (cfg: FrictionConfig) => void;
-  prayed: string[]; onPray: (id: string) => void;
+  prayed: string[]; onPray: (id: string) => Promise<boolean>;
 }) {
   const [all, setAll] = useState<Priere[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,6 +201,17 @@ export function PagePriere({ role, onOpen, onSubmit, prayed, onPray }: {
   useEffect(() => {
     getPrieres().then(data => { setAll(data); setLoading(false); });
   }, []);
+
+  // Bascule le sujet : le compteur partagé est mis à jour de façon optimiste
+  // (±1) dans la liste, puis réconcilié si la persistance échoue.
+  async function pray(id: string) {
+    const wasOn = prayed.includes(id);
+    const bump = (d: number) => setAll(list => list.map(p =>
+      p.id === id ? { ...p, prie: Math.max(0, p.prie + d) } : p));
+    bump(wasOn ? -1 : 1);
+    const ok = await onPray(id);
+    if (!ok) bump(wasOn ? 1 : -1);
+  }
 
   const cats = ['Tous', ...Array.from(new Set(all.map(p => p.cat).filter(Boolean)))];
   const items = all.filter(p =>
@@ -232,7 +243,7 @@ export function PagePriere({ role, onOpen, onSubmit, prayed, onPray }: {
         <div className="list">
           {items.map((p, i) => {
             const on = prayed.includes(p.id);
-            const count = p.prie + (on ? 1 : 0);
+            const count = p.prie;
             return (
               <Reveal key={p.id} delay={i * 45}>
                 <div className="card" style={{ padding: 15 }}>
@@ -249,11 +260,13 @@ export function PagePriere({ role, onOpen, onSubmit, prayed, onPray }: {
                     </span>
                   </button>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
-                    <button className={'btn btn-sm ' + (on ? 'btn-primary' : 'btn-soft')} onClick={() => onPray(p.id)} style={{ transition: 'all .25s' }}>
+                    <button className={'btn btn-sm ' + (on ? 'btn-primary' : 'btn-soft')} onClick={() => pray(p.id)} style={{ transition: 'all .25s' }}>
                       <Icon n="flame" size={15} sw={2} />{on ? 'Vous priez' : 'Je prie'}
                     </button>
                     <span className="t3" style={{ fontSize: 12.5, fontWeight: 600 }}>
-                      <b style={{ color: 'var(--c-i)' }}>{count}</b> personnes prient
+                      {count > 0
+                        ? <><b style={{ color: 'var(--c-i)' }}>{count}</b> {count > 1 ? 'personnes prient' : 'personne prie'}</>
+                        : 'Soyez le premier à prier'}
                     </span>
                   </div>
                 </div>

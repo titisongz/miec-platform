@@ -34,6 +34,7 @@ export default function PagePriere() {
 
       <div style={{ display: 'flex', gap: 9, marginBottom: 18 }}>
         <Badge tone="blue" dot>{items.length} sujets actifs</Badge>
+        <Badge tone="blue">{items.reduce((n, p) => n + p.prie, 0)} intercessions</Badge>
       </div>
 
       {loading ? (
@@ -61,7 +62,10 @@ export default function PagePriere() {
                 <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: 'var(--ink)' }}>{p.full || p.sujet}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, paddingTop: 13, borderTop: '1px solid var(--line)' }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                    <AIcon n="flame" size={14} />Porté en intercession
+                    <AIcon n="flame" size={14} />
+                    {p.prie > 0
+                      ? <><b style={{ color: 'var(--c-i)' }}>{p.prie}</b>&nbsp;{p.prie > 1 ? 'personnes prient' : 'personne prie'}</>
+                      : 'Aucun intercesseur pour le moment'}
                   </span>
                   <button className="a-btn a-btn-danger a-btn-sm" onClick={() => setDel(p)}>
                     <AIcon n="trash" size={15} />Retirer

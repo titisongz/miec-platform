@@ -5,7 +5,7 @@ import Icon from '@/components/icons';
 import { AppBar, FrictionModal, Sheet, Toggle, Spinner, NotificationCenter } from '@/components/ui';
 import { accentStyle, INP_STYLE } from '@/lib/accent';
 import { supabase } from '@/lib/supabase';
-import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences, updateProfile, getModeMaintenance } from '@/lib/queries';
+import { addFavori, removeFavori, getNotifications, markNotificationLue, markAllNotificationsLues, updateNotifPreferences, updateProfile, getModeMaintenance, getPrayedPriereIds, togglePriere } from '@/lib/queries';
 import { notifyNewPriere, notifyNewTemoignage } from '@/lib/notifications';
 import PageAccueil from '@/components/pages/accueil';
 import { PageEnseignements, PageTemoignages, PageAnnonces, PagePriere } from '@/components/pages/modules1';
@@ -260,6 +260,10 @@ export default function App() {
       }
       setProfile(p);
       setNotif({ email: p.notif_email ?? true, whatsapp: p.notif_whatsapp ?? false });
+      // Sujets déjà « portés en intercession » par cet utilisateur : rechargés
+      // depuis la base pour que l'état du bouton « Je prie » suive l'utilisateur
+      // d'un appareil à l'autre (et non plus seulement l'onglet courant).
+      getPrayedPriereIds(p.id).then(setPrayed);
     } finally {
       setProfileLoading(false);
     }
@@ -433,12 +437,27 @@ export default function App() {
   }
 
   /* ── Prayers ──────────────────────────────────────────────────────── */
-  function pray(id: string) {
-    setPrayed(p => {
-      if (p.includes(id)) return p.filter(x => x !== id);
-      setToast({ msg: 'Merci, vous priez 🙏', accent: 'pri' });
-      return [...p, id];
-    });
+  // Bascule « Je prie pour ce sujet ». Persiste dans prie_par (le compteur
+  // partagé est recalculé par un trigger côté base, donc visible par toute la
+  // communauté et le panel admin). Mise à jour optimiste + rollback sur échec.
+  // Renvoie true si l'opération a réussi, pour que la vue puisse réconcilier le
+  // compteur affiché. Un visiteur non connecté garde un basculement local
+  // uniquement (données de démonstration, aucune écriture possible).
+  async function pray(id: string): Promise<boolean> {
+    const wasOn = prayed.includes(id);
+    setPrayed(p => wasOn ? p.filter(x => x !== id) : [...p, id]);
+    if (!wasOn) setToast({ msg: 'Merci, vous priez 🙏', accent: 'pri' });
+
+    if (!profile?.id) return true;   // démo : basculement local, pas de persistance
+
+    try {
+      await togglePriere(id, profile.id);
+      return true;
+    } catch {
+      setPrayed(p => wasOn ? [...p, id] : p.filter(x => x !== id));   // rollback
+      setToast({ msg: 'Action impossible, réessayez.', accent: 'tem' });
+      return false;
+    }
   }
 
   /* ── Auth flow ────────────────────────────────────────────────────── */
