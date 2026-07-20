@@ -1016,6 +1016,16 @@ export async function getActivityRecente(): Promise<typeof DB.ACTIVITY> {
     getSorties(),
   ]);
 
+  // Témoignage : on re-filtre explicitement sur statut='publie' plutôt que de
+  // prendre `[0]` tel quel. getTemoignages() filtre déjà côté requête, mais un
+  // témoignage dépublié (statut repassé à 'en_attente' par le back-office) ne
+  // doit jamais réapparaître dans « Cette semaine » — y compris pour son auteur
+  // ou un responsable, à qui la RLS `temoignages: lecture publié` autorise la
+  // lecture de leurs lignes non publiées.
+  const temPublies = temRes.status === 'fulfilled'
+    ? temRes.value.filter(t => t.statut === 'publie')
+    : [];
+
   return {
     enseignement:
       ensRes.status === 'fulfilled' && ensRes.value[0]
@@ -1025,10 +1035,7 @@ export async function getActivityRecente(): Promise<typeof DB.ACTIVITY> {
       annRes.status === 'fulfilled' && annRes.value[0]
         ? annRes.value[0]
         : DB.ACTIVITY.annonce,
-    temoignage:
-      temRes.status === 'fulfilled' && temRes.value[0]
-        ? temRes.value[0]
-        : DB.ACTIVITY.temoignage,
+    temoignage: temPublies[0] ?? DB.ACTIVITY.temoignage,
     sortie:
       sorRes.status === 'fulfilled' && sorRes.value.length
         ? (sorRes.value.find(s => s.statut === 'a_venir') ?? sorRes.value[0])
@@ -1055,7 +1062,14 @@ const MODULE_TABLES: Record<string, string> = {
 export async function getModuleCounts(): Promise<Record<string, number>> {
   const keys = Object.keys(MODULE_TABLES);
   const results = await Promise.allSettled(
-    keys.map(k => supabase.from(MODULE_TABLES[k]).select('id', { count: 'exact', head: true })),
+    keys.map(k => {
+      const q = supabase.from(MODULE_TABLES[k]).select('id', { count: 'exact', head: true });
+      // Un témoignage non publié (en attente ou dépublié) n'est pas un contenu
+      // visible : il ne doit pas être compté dans la tuile du module. Sans ce
+      // filtre, l'auteur et les responsables — que la RLS autorise à lire leurs
+      // lignes non publiées — voyaient un total supérieur à la liste affichée.
+      return k === 'temoignages' ? q.eq('statut', 'publie') : q;
+    }),
   );
   const counts: Record<string, number> = {};
   keys.forEach((k, i) => {

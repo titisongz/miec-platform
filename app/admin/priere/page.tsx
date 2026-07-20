@@ -58,6 +58,11 @@ export default function PagePriere() {
                     <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-3)' }}>{p.date}</div>
                   </div>
                   <Badge tone="blue" dot>{p.cat}</Badge>
+                  {/* Compteur d'intercesseurs (prieres.compteur_prie) : visible
+                      directement sur la carte, sans avoir à ouvrir le sujet. */}
+                  <Badge tone="amber" icon="flame">
+                    {p.prie} {p.prie > 1 ? 'prient' : 'prie'}
+                  </Badge>
                 </div>
                 <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: 'var(--ink)' }}>{p.full || p.sujet}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, paddingTop: 13, borderTop: '1px solid var(--line)' }}>

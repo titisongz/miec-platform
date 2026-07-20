@@ -1,10 +1,10 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AIcon from '@/components/admin/icon';
 import { Reveal, Badge, Panel, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getAdminStats } from '@/lib/admin-queries';
-import { getPendingTemoignages } from '@/lib/admin-queries';
+import { getModuleCounts } from '@/lib/queries';
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
@@ -25,15 +25,17 @@ function StatCard({ accent, icon, value, label, delta, delay }: {
 
 // ── Module bar ────────────────────────────────────────────────────────────────
 
+// `key` = clé renvoyée par getModuleCounts() (lib/queries.ts), qui fait un
+// count() exact sur la table Supabase correspondante.
 const MODULES_BAR = [
-  { mod: 'Enseignements', c: 'ens', icon: 'book' },
-  { mod: 'Témoignages',   c: 'tem', icon: 'quote' },
-  { mod: 'Annonces',      c: 'ann', icon: 'mega' },
-  { mod: 'Prière',        c: 'pri', icon: 'flame' },
-  { mod: 'Évangélisation',c: 'eva', icon: 'compass' },
-  { mod: 'Ressources',    c: 'res', icon: 'folder' },
-  { mod: 'Librairie',     c: 'res', icon: 'books' },
-  { mod: 'IPB · Cours',   c: 'ipb', icon: 'cap' },
+  { key: 'enseignements',  mod: 'Enseignements', c: 'ens', icon: 'book' },
+  { key: 'temoignages',    mod: 'Témoignages',   c: 'tem', icon: 'quote' },
+  { key: 'annonces',       mod: 'Annonces',      c: 'ann', icon: 'mega' },
+  { key: 'priere',         mod: 'Prière',        c: 'pri', icon: 'flame' },
+  { key: 'evangelisation', mod: 'Évangélisation',c: 'eva', icon: 'compass' },
+  { key: 'ressources',     mod: 'Ressources',    c: 'res', icon: 'folder' },
+  { key: 'librairie',      mod: 'Librairie',     c: 'res', icon: 'books' },
+  { key: 'ipb',            mod: 'IPB · Cours',   c: 'ipb', icon: 'cap' },
 ];
 
 function ModuleBar({ m, max, delay, n }: { m: typeof MODULES_BAR[0]; max: number; delay: number; n: number }) {
@@ -62,14 +64,20 @@ export default function PageDashboard() {
   const [hour, setHour] = useState(12);
   const greet = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bel après-midi' : 'Bonsoir';
 
-  // Module counts (static representation — replace with DB counts if needed)
-  const moduleCounts = [32, 128, 24, 86, 18, 64, 12, 6];
-  const maxMod = Math.max(...moduleCounts);
+  // Contenus par module : vrais count() Supabase (une requête head:true par
+  // table), et non plus des valeurs de démonstration codées en dur.
+  const [moduleCounts, setModuleCounts] = useState<Record<string, number>>({});
+  const maxMod = Math.max(1, ...MODULES_BAR.map(m => moduleCounts[m.key] ?? 0));
+
+  const refresh = useCallback(() => Promise.all([
+    getAdminStats().then(setStats).catch(() => {}),
+    getModuleCounts().then(setModuleCounts).catch(() => {}),
+  ]), []);
 
   useEffect(() => {
     setHour(new Date().getHours());
-    getAdminStats().then(setStats).catch(() => {});
-  }, []);
+    refresh();
+  }, [refresh]);
 
   const SHORTCUTS = [
     ['verset',         'sparkle', 'slate', 'Verset du jour'],
@@ -91,7 +99,7 @@ export default function PageDashboard() {
           <div className="psub">Voici l&apos;état de la communauté et les éléments qui requièrent votre attention aujourd&apos;hui.</div>
         </div>
         <div className="pacts">
-          <button className="a-btn a-btn-ghost a-btn-sm" onClick={() => { getAdminStats().then(setStats); pushToast('Données actualisées', 'slate'); }}>
+          <button className="a-btn a-btn-ghost a-btn-sm" onClick={() => { refresh(); pushToast('Données actualisées', 'slate'); }}>
             <AIcon n="refresh" size={16} />Actualiser
           </button>
         </div>
@@ -149,7 +157,7 @@ export default function PageDashboard() {
         <Panel accent="slate" icon="chart" title="Contenus par module">
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {MODULES_BAR.map((m, i) => (
-              <ModuleBar key={i} m={m} n={moduleCounts[i]} max={maxMod} delay={i * 40} />
+              <ModuleBar key={m.key} m={m} n={moduleCounts[m.key] ?? 0} max={maxMod} delay={i * 40} />
             ))}
           </div>
         </Panel>

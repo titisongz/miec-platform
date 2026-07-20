@@ -73,8 +73,19 @@ export default function PageAccueil({ role, displayName = '', onNav, onOpen, onA
   // new Date() ne doit pas servir au rendu initial : l'heure/le fuseau du serveur
   // diffèrent du client → hydration mismatch (React #418). On le calcule après montage.
   const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => { getActivityRecente().then(setActivity); }, []);
-  useEffect(() => { getModuleCounts().then(setCounts); }, []);
+  // Rechargé au montage ET au retour sur l'onglet : une modification faite
+  // entre-temps depuis le back-office (témoignage dépublié, contenu supprimé…)
+  // est ainsi répercutée sans avoir à recharger la page.
+  useEffect(() => {
+    const load = () => {
+      getActivityRecente().then(setActivity);
+      getModuleCounts().then(setCounts);
+    };
+    load();
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
   useEffect(() => { setNow(new Date()); }, []);
 
   const hour = now?.getHours() ?? 12;
