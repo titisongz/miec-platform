@@ -1,7 +1,7 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Modal, Badge, Reveal, Empty, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Modal, Badge, Reveal, Empty, StatBand, Toolbar, SearchInput, DateRange, inDateRange, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getPrieres } from '@/lib/queries';
 import { deletePriere } from '@/lib/admin-queries';
 import type { Priere } from '@/lib/types';
@@ -10,6 +10,9 @@ export default function PagePriere() {
   const [items, setItems] = useState<Priere[]>([]);
   const [loading, setLoading] = useState(true);
   const [del, setDel] = useState<Priere | null>(null);
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => {
@@ -26,16 +29,35 @@ export default function PagePriere() {
     setDel(null);
   }
 
+  // Stats calculées sur TOUS les sujets (vue d'ensemble du module), la liste
+  // ci-dessous étant, elle, restreinte par la recherche et la plage de dates.
+  const totalPrie = items.reduce((n, p) => n + p.prie, 0);
+  const urgents = items.filter(p => p.urgent).length;
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return items.filter(p =>
+      (!term || p.sujet.toLowerCase().includes(term) || p.auteur.toLowerCase().includes(term)) &&
+      inDateRange(p.created_at, from, to)
+    );
+  }, [items, q, from, to]);
+
   return (
     <div className="a-page a-pagefade" style={aStyle('pri')}>
       <PageHead accent="pri" icon="flame"
         eyebrow={<><span style={{ width: 8, height: 8, borderRadius: 9, background: 'var(--c)' }} />Module Prière</>}
         title="Mur de prière" sub="Sujets de prière soumis par la communauté. La modération permet de retirer un contenu inapproprié." />
 
-      <div style={{ display: 'flex', gap: 9, marginBottom: 18 }}>
-        <Badge tone="blue" dot>{items.length} sujets actifs</Badge>
-        <Badge tone="blue">{items.reduce((n, p) => n + p.prie, 0)} intercessions</Badge>
-      </div>
+      <StatBand accent="pri" stats={[
+        { l: 'Sujets de prière', v: items.length, i: 'flame' },
+        { l: 'Sujets urgents', v: urgents, i: 'bolt' },
+        { l: 'Personnes priant', v: totalPrie, i: 'users' },
+      ]} />
+
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher un sujet, un auteur…" />
+        <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+      </Toolbar>
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -43,9 +65,11 @@ export default function PagePriere() {
         </div>
       ) : items.length === 0 ? (
         <Empty icon="flame" title="Aucun sujet de prière" />
+      ) : shown.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucun sujet ne correspond à cette recherche ou à cette période." />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start' }}>
-          {items.map((p, i) => {
+          {shown.map((p, i) => {
             const initials = p.auteur === 'Anonyme' ? '?' : p.auteur.split(' ').map(w => w[0]).slice(0, 2).join('');
             return (
               <Reveal key={p.id} delay={i * 40} className="a-card" style={{ ...aStyle('pri'), padding: 16 }}>

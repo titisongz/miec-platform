@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Modal, Field, Textarea, Badge, Seg, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Modal, Field, Textarea, Badge, Seg, Empty, Spinner, StatBand, Toolbar, SearchInput, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getTemoignages } from '@/lib/queries';
 import { getPendingTemoignages, approveTemoignage, unpublishTemoignage, deleteTemoignage } from '@/lib/admin-queries';
 import type { Temoignage } from '@/lib/types';
@@ -16,6 +16,7 @@ export default function PageTemoignages() {
   const [out, setOut] = useState<Record<string, boolean>>({});
   const [refuse, setRefuse] = useState<PendingTem | null>(null);
   const [motif, setMotif] = useState('');
+  const [q, setQ] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => {
@@ -58,27 +59,44 @@ export default function PageTemoignages() {
     } catch { pushToast('Erreur', 'tem'); }
   }
 
+  // La recherche filtre l'onglet actif (file de validation ou publiés).
+  const term = q.trim().toLowerCase();
+  const match = (titre: string, auteur: string) =>
+    !term || titre.toLowerCase().includes(term) || auteur.toLowerCase().includes(term);
+  const pendingShown = pending.filter(t => match(t.titre, t.auteur));
+  const publishedShown = published.filter(t => match(t.titre, t.auteur));
+
   return (
     <div className="a-page a-pagefade" style={aStyle('tem')}>
       <PageHead accent="tem" icon="quote"
         eyebrow={<><span style={{ width: 8, height: 8, borderRadius: 9, background: 'var(--c)' }} />Module Témoignages</>}
         title="Témoignages" sub="Validez les témoignages soumis par les membres avant publication." />
 
-      <div style={{ marginBottom: 20 }}>
+      <StatBand accent="tem" stats={[
+        { l: 'Total témoignages', v: pending.length + published.length, i: 'quote' },
+        { l: 'En attente', v: pending.length, i: 'clock' },
+        { l: 'Publiés', v: published.length, i: 'check' },
+      ]} />
+
+      <div style={{ marginBottom: 16 }}>
         <Seg active={tab} onPick={setTab} tabs={[
           { v: 'attente', l: 'File de validation', icon: 'clock', n: pending.length },
           { v: 'publie',  l: 'Publiés',           icon: 'check', n: published.length },
         ]} />
       </div>
 
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher un témoignage, un auteur…" />
+      </Toolbar>
+
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           {[1, 2, 3, 4].map(i => <div key={i} className="a-sk" style={{ height: 180, borderRadius: 16 }} />)}
         </div>
       ) : tab === 'attente' ? (
-        pending.length ? (
+        pendingShown.length ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-            {pending.map(t => {
+            {pendingShown.map(t => {
               const initials = t.auteur === 'Anonyme' ? '?' : t.auteur.split(' ').map(w => w[0]).slice(0, 2).join('');
               return (
                 <div key={t.id} className={'a-qcard' + (out[t.id] ? ' out' : '')} style={aStyle('tem')}>
@@ -106,13 +124,15 @@ export default function PageTemoignages() {
               );
             })}
           </div>
+        ) : term ? (
+          <Empty icon="search" title="Aucun résultat" sub="Aucun témoignage en attente ne correspond à cette recherche." />
         ) : <Empty icon="check" title="File vide" sub="Tous les témoignages soumis ont été traités. Beau travail !" />
-      ) : published.length ? (
+      ) : publishedShown.length ? (
         <div className="a-card" style={{ padding: 0, overflow: 'hidden' }}>
           <table className="a-tbl">
             <thead><tr><th></th><th>Témoignage</th><th>Auteur</th><th>Catégorie</th><th>Date</th><th></th></tr></thead>
             <tbody>
-              {published.map(t => (
+              {publishedShown.map(t => (
                 <tr key={t.id ?? t.titre}>
                   <td style={{ width: 44 }}><span className="a-rowico"><AIcon n="quote" size={16} /></span></td>
                   <td><div className="a-tprime" style={{ maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.titre}</div></td>
@@ -131,6 +151,8 @@ export default function PageTemoignages() {
             </tbody>
           </table>
         </div>
+      ) : term ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucun témoignage publié ne correspond à cette recherche." />
       ) : <Empty icon="quote" title="Aucun témoignage publié" />}
 
       {refuse && (

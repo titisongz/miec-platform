@@ -1,7 +1,7 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Empty, Spinner, StatBand, Toolbar, SearchInput, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getRessources } from '@/lib/queries';
 import { createRessource, updateRessource, deleteRessource } from '@/lib/admin-queries';
 import { uploadPhotos, uploadFile, validateFile, MAX_FILE_MB } from '@/lib/storage';
@@ -71,9 +71,23 @@ export default function PageRessources() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ edit?: Ressource } | null>(null);
   const [del, setDel] = useState<Ressource | null>(null);
+  const [q, setQ] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => { getRessources().then(r => { setItems(r); setLoading(false); }); }, []);
+
+  // Répartition par type (RES_TYPES) : une carte de stat par format géré.
+  const parType = RES_TYPES.map(t => ({
+    l: t.l, i: resIcon(t.v), v: items.filter(r => r.type === t.v).length,
+  }));
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter(r =>
+      r.titre.toLowerCase().includes(term) || r.cat.toLowerCase().includes(term) || r.fmt.toLowerCase().includes(term)
+    );
+  }, [items, q]);
 
   async function save(f: FormData) {
     try {
@@ -110,14 +124,25 @@ export default function PageRessources() {
         <button className="a-btn a-btn-primary" onClick={() => setModal({})}><AIcon n="upload" size={17} />Importer un fichier</button>
       </PageHead>
 
+      <StatBand accent="res" stats={[
+        { l: 'Total ressources', v: items.length, i: 'folder' },
+        ...parType,
+      ]} />
+
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher un fichier, une catégorie…" />
+      </Toolbar>
+
       {loading ? <div className="a-sk" style={{ height: 300, borderRadius: 16 }} /> : items.length === 0 ? (
         <Empty icon="folder" title="Aucune ressource" />
+      ) : shown.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucune ressource ne correspond à cette recherche." />
       ) : (
         <Panel accent="res" pad={false}>
           <table className="a-tbl">
             <thead><tr><th></th><th>Ressource</th><th>Type</th><th>Catégorie</th><th>Taille</th><th></th></tr></thead>
             <tbody>
-              {items.map(r => (
+              {shown.map(r => (
                 <tr key={r.id}>
                   <td style={{ width: 44 }}><span className="a-rowico"><AIcon n={resIcon(r.type)} size={16} /></span></td>
                   <td><div className="a-tprime">{r.titre}</div></td>

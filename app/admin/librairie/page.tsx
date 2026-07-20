@@ -1,7 +1,7 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Badge, Empty, Spinner, StatBand, Toolbar, SearchInput, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getLivres } from '@/lib/queries';
 import { createLivre, updateLivre, deleteLivre } from '@/lib/admin-queries';
 import { uploadPhotos } from '@/lib/storage';
@@ -57,9 +57,22 @@ export default function PageLibrairie() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ edit?: Livre } | null>(null);
   const [del, setDel] = useState<Livre | null>(null);
+  const [q, setQ] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => { getLivres().then(l => { setItems(l); setLoading(false); }); }, []);
+
+  // « Lien boutique » = lien_acces renseigné (bouton « Lire / Accéder » actif
+  // côté public ; sans lui la fiche affiche « Non disponible »).
+  const avecLien = items.filter(l => !!l.lien_acces).length;
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter(l =>
+      l.titre.toLowerCase().includes(term) || l.auteur.toLowerCase().includes(term) || l.cat.toLowerCase().includes(term)
+    );
+  }, [items, q]);
 
   async function save(f: FormData) {
     const annee = f.annee ? Number(f.annee) : 0;
@@ -97,14 +110,25 @@ export default function PageLibrairie() {
         <button className="a-btn a-btn-primary" onClick={() => setModal({})}><AIcon n="plus" size={17} />Ajouter un livre</button>
       </PageHead>
 
+      <StatBand accent="res" stats={[
+        { l: 'Total livres', v: items.length, i: 'books' },
+        { l: 'Avec lien boutique', v: avecLien, i: 'link' },
+      ]} />
+
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher un titre, un auteur…" />
+      </Toolbar>
+
       {loading ? <div className="a-sk" style={{ height: 300, borderRadius: 16 }} /> : items.length === 0 ? (
         <Empty icon="books" title="Aucun livre" />
+      ) : shown.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucun livre ne correspond à cette recherche." />
       ) : (
         <Panel accent="res" pad={false}>
           <table className="a-tbl">
             <thead><tr><th></th><th>Titre</th><th>Auteur</th><th>Catégorie</th><th>Pages</th><th></th></tr></thead>
             <tbody>
-              {items.map(l => (
+              {shown.map(l => (
                 <tr key={l.id}>
                   <td style={{ width: 44 }}><span className="a-rowico"><AIcon n="books" size={16} /></span></td>
                   <td>

@@ -165,6 +165,109 @@ export function Badge({ tone = '', icon, dot = true, children }: {
   );
 }
 
+// ── Bandeau de statistiques ───────────────────────────────────────────────────
+// Reprend le modèle visuel des cartes de stats de app/admin/evangelisation :
+// icône ronde teintée à gauche, grand nombre, libellé en dessous. Le nombre de
+// colonnes suit le nombre de stats fournies pour garder des cartes régulières.
+
+export interface Stat { l: string; v: number | string; i: string }
+
+export function StatBand({ accent = 'slate', stats }: { accent?: string; stats: Stat[] }) {
+  if (!stats.length) return null;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 12, marginBottom: 24 }}>
+      {stats.map(s => (
+        <div key={s.l} className="a-card" style={{ ...aStyle(accent), padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+            <AIcon n={s.i} size={18} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{s.v}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', marginTop: 3 }}>{s.l}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Barre de recherche + filtres ──────────────────────────────────────────────
+
+export function SearchInput({ value, onChange, placeholder = 'Rechercher…' }: {
+  value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <div className="a-in-pre" style={{ flex: 1, minWidth: 200 }}>
+      <span className="pfx" style={{ fontFamily: 'inherit' }}><AIcon n="search" size={16} /></span>
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} />
+      {value && (
+        <button className="a-iact" onClick={() => onChange('')} aria-label="Effacer la recherche"
+          style={{ marginRight: 6, flex: '0 0 auto' }}>
+          <AIcon n="x" size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Filtre « Du … Au … » sur une plage de dates (valeurs ISO 'YYYY-MM-DD'). */
+export function DateRange({ from, to, onFrom, onTo }: {
+  from: string; to: string; onFrom: (v: string) => void; onTo: (v: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+      <AIcon n="calendar" size={16} style={{ color: 'var(--ink-3)', flex: '0 0 auto' }} />
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)' }}>
+        Du
+        <Input type="date" value={from} onChange={e => onFrom(e.target.value)} style={{ height: 40, width: 158 }} />
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)' }}>
+        Au
+        <Input type="date" value={to} onChange={e => onTo(e.target.value)} style={{ height: 40, width: 158 }} />
+      </label>
+      {(from || to) && (
+        <button className="a-btn a-btn-ghost a-btn-sm" onClick={() => { onFrom(''); onTo(''); }}>
+          <AIcon n="x" size={14} />Effacer
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Conteneur de la barre d'outils (recherche + filtres) au-dessus d'une liste. */
+export function Toolbar({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Teste si une date tombe dans la plage [from, to] (bornes incluses, vides =
+ * pas de borne). `value` est une date ISO ('YYYY-MM-DD' ou timestamp complet) ;
+ * on ne compare que la partie jour pour rester indépendant du fuseau. Une
+ * valeur vide/invalide est conservée (on ne masque pas une ligne sans date).
+ */
+export function inDateRange(value: string | undefined, from: string, to: string): boolean {
+  if (!from && !to) return true;
+  if (!value) return true;
+  const day = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return true;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+
+/** Vrai si la date ISO tombe dans le mois calendaire courant. */
+export function isThisMonth(value: string | undefined): boolean {
+  if (!value) return false;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
 // ── Placeholder ───────────────────────────────────────────────────────────────
 
 export function Ph({ label, style, className = '', children }: {

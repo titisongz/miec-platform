@@ -73,6 +73,9 @@ export interface Annonce {
 export interface Priere {
   id: string; sujet: string; auteur: string; date: string;
   cat: string; prie: number; urgent: boolean; full: string;
+  // Date brute ISO : `date` est un libellé relatif (« il y a 2 h ») destiné à
+  // l'affichage, inexploitable pour trier ou filtrer par plage de dates.
+  created_at?: string;
 }
 
 export interface Ressource {

@@ -1,7 +1,7 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Reveal, Spinner, Empty, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Reveal, Spinner, Empty, StatBand, Toolbar, SearchInput, DateRange, inDateRange, isThisMonth, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getEnseignementsAdmin, getSeriesAdmin, createEnseignement, updateEnseignement, deleteEnseignement, createSerie } from '@/lib/admin-queries';
 import type { Enseignement, Serie } from '@/lib/types';
 
@@ -102,6 +102,9 @@ export default function PageEnseignements() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ edit?: Enseignement } | null>(null);
   const [del, setDel] = useState<Enseignement | null>(null);
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => {
@@ -110,7 +113,19 @@ export default function PageEnseignements() {
     });
   }, []);
 
-  const seriesNames = Array.from(new Set(items.map(e => e.serie)));
+  // Stats sur l'ensemble du module ; la liste ci-dessous suit recherche + dates.
+  const ceMois = items.filter(e => isThisMonth(e.date)).length;
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return items.filter(e =>
+      (!term || e.titre.toLowerCase().includes(term) || e.auteur.toLowerCase().includes(term) || e.serie.toLowerCase().includes(term)) &&
+      inDateRange(e.date, from, to)
+    );
+  }, [items, q, from, to]);
+
+  // Séries affichées = celles qui contiennent encore un enseignement après filtrage.
+  const seriesNames = Array.from(new Set(shown.map(e => e.serie)));
 
   async function save(f: FormData) {
     try {
@@ -164,19 +179,27 @@ export default function PageEnseignements() {
         </button>
       </PageHead>
 
-      <div style={{ display: 'flex', gap: 9, marginBottom: 18 }}>
-        <Badge tone="green" dot>{items.length} messages</Badge>
-        <Badge tone="neutral">{seriesNames.length} séries</Badge>
-      </div>
+      <StatBand accent="ens" stats={[
+        { l: 'Total enseignements', v: items.length, i: 'book' },
+        { l: 'Séries', v: series.length, i: 'layout' },
+        { l: 'Ce mois-ci', v: ceMois, i: 'calendar' },
+      ]} />
+
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher un titre, un intervenant, une série…" />
+        <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+      </Toolbar>
 
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {[1, 2].map(i => <div key={i} className="a-sk" style={{ height: 120, borderRadius: 16 }} />)}
         </div>
-      ) : seriesNames.length === 0 ? (
+      ) : items.length === 0 ? (
         <Empty icon="book" title="Aucun enseignement" sub="Publiez le premier message pour le voir apparaître ici." />
+      ) : seriesNames.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucun enseignement ne correspond à cette recherche ou à cette période." />
       ) : seriesNames.map((s, si) => {
-        const list = items.filter(e => e.serie === s);
+        const list = shown.filter(e => e.serie === s);
         return (
           <Reveal key={s} delay={si * 60} style={{ marginBottom: 18, display: 'block' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 2px 11px' }}>

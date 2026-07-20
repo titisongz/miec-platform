@@ -1,7 +1,7 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Badge, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, MediaPicker, Badge, Empty, Spinner, StatBand, Toolbar, SearchInput, DateRange, inDateRange, isThisMonth, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getAnnoncesAdmin, createAnnonce, updateAnnonce, deleteAnnonce } from '@/lib/admin-queries';
 import { uploadPhotos } from '@/lib/storage';
 import type { Annonce } from '@/lib/types';
@@ -50,9 +50,24 @@ export default function PageAnnonces() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ edit?: Annonce } | null>(null);
   const [del, setDel] = useState<Annonce | null>(null);
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => { getAnnoncesAdmin().then(a => { setItems(a); setLoading(false); }); }, []);
+
+  // Stats sur l'ensemble du module ; la liste suit recherche + plage de dates.
+  const urgentes = items.filter(a => a.urgent).length;
+  const ceMois = items.filter(a => isThisMonth(a.date)).length;
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return items.filter(a =>
+      (!term || a.titre.toLowerCase().includes(term) || a.cat.toLowerCase().includes(term)) &&
+      inDateRange(a.date, from, to)
+    );
+  }, [items, q, from, to]);
 
   async function save(f: FormData) {
     try {
@@ -87,16 +102,29 @@ export default function PageAnnonces() {
         <button className="a-btn a-btn-primary" onClick={() => setModal({})}><AIcon n="plus" size={17} />Nouvelle annonce</button>
       </PageHead>
 
+      <StatBand accent="ann" stats={[
+        { l: 'Total annonces', v: items.length, i: 'mega' },
+        { l: 'Annonces urgentes', v: urgentes, i: 'bolt' },
+        { l: 'Ce mois-ci', v: ceMois, i: 'calendar' },
+      ]} />
+
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher une annonce, une catégorie…" />
+        <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+      </Toolbar>
+
       {loading ? (
         <div className="a-sk" style={{ height: 300, borderRadius: 16 }} />
       ) : items.length === 0 ? (
         <Empty icon="mega" title="Aucune annonce" sub="Publiez la première annonce." />
+      ) : shown.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucune annonce ne correspond à cette recherche ou à cette période." />
       ) : (
         <Panel accent="ann" pad={false}>
           <table className="a-tbl">
             <thead><tr><th></th><th>Annonce</th><th>Catégorie</th><th>Date</th><th>Statut</th><th></th></tr></thead>
             <tbody>
-              {items.map(a => (
+              {shown.map(a => (
                 <tr key={a.id}>
                   <td style={{ width: 44 }}><span className="a-rowico"><AIcon n="mega" size={16} /></span></td>
                   <td>

@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, MediaPicker, Badge, Reveal, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, MediaPicker, Badge, Reveal, Empty, Spinner, StatBand, Toolbar, SearchInput, DateRange, inDateRange, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getSortiesAdmin, createSortie, updateSortie, deleteSortie, upsertRapportSortie } from '@/lib/admin-queries';
 import { uploadPhotos } from '@/lib/storage';
 import type { Sortie } from '@/lib/types';
@@ -85,6 +85,9 @@ export default function PageEvangelisation() {
   const [modal, setModal] = useState<{ edit?: Sortie } | null>(null);
   const [rapport, setRapport] = useState<Sortie | null>(null);
   const [del, setDel] = useState<Sortie | null>(null);
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [toasts, pushToast] = useToasts();
 
   useEffect(() => { getSortiesAdmin().then(s => { setItems(s); setLoading(false); }).catch(() => setLoading(false)); }, []);
@@ -125,8 +128,13 @@ export default function PageEvangelisation() {
     setDel(null);
   }
 
-  const totalContacts = items.reduce((a, s) => a + (s.contacts ?? 0), 0);
   const totalDecisions = items.reduce((a, s) => a + (s.decisions ?? 0), 0);
+
+  const term = q.trim().toLowerCase();
+  const shown = items.filter(s =>
+    (!term || s.titre.toLowerCase().includes(term) || s.theme.toLowerCase().includes(term)) &&
+    inDateRange(s.date, from, to)
+  );
 
   return (
     <div className="a-page wide a-pagefade" style={aStyle('eva')}>
@@ -136,24 +144,17 @@ export default function PageEvangelisation() {
         <button className="a-btn a-btn-primary" onClick={() => setModal({})}><AIcon n="plus" size={17} />Planifier une sortie</button>
       </PageHead>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-        {[
-          { l: 'Total sorties', v: items.length, i: 'compass' },
-          { l: 'Passées', v: items.filter(s => s.statut === 'passee').length, i: 'check' },
-          { l: 'À venir', v: items.filter(s => s.statut === 'a_venir' || s.statut === 'en_cours').length, i: 'calendar' },
-          { l: 'Décisions de foi', v: totalDecisions, i: 'flame' },
-        ].map(s => (
-          <div key={s.l} className="a-card" style={{ ...aStyle('eva'), padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-              <AIcon n={s.i} size={18} />
-            </span>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{s.v}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', marginTop: 3 }}>{s.l}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <StatBand accent="eva" stats={[
+        { l: 'Total sorties', v: items.length, i: 'compass' },
+        { l: 'Passées', v: items.filter(s => s.statut === 'passee').length, i: 'check' },
+        { l: 'À venir', v: items.filter(s => s.statut === 'a_venir' || s.statut === 'en_cours').length, i: 'calendar' },
+        { l: 'Décisions de foi', v: totalDecisions, i: 'flame' },
+      ]} />
+
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher une sortie, un thème…" />
+        <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+      </Toolbar>
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -161,9 +162,11 @@ export default function PageEvangelisation() {
         </div>
       ) : items.length === 0 ? (
         <Empty icon="compass" title="Aucune sortie" sub="Planifiez la première sortie évangélique." />
+      ) : shown.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucune sortie ne correspond à cette recherche ou à cette période." />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-          {items.map((s, i) => (
+          {shown.map((s, i) => (
             <Reveal key={s.id} delay={i * 40} className="a-card" style={{ ...aStyle('eva'), padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--line)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>

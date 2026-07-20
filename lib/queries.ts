@@ -239,6 +239,7 @@ export async function getPrieres(categorie?: string): Promise<Priere[]> {
       prie: p.compteur_prie,
       urgent: p.urgent,
       full: p.details ?? '',
+      created_at: p.created_at,
     }));
   } catch {
     return DB.PRIERES;

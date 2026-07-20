@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import AIcon from '@/components/admin/icon';
-import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Empty, Spinner, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
+import { PageHead, Panel, Modal, Field, Input, Textarea, Select, Badge, Seg, Empty, Spinner, StatBand, Toolbar, SearchInput, DateRange, inDateRange, aStyle, useToasts, ToastHost } from '@/components/admin/ui';
 import { getIPBCours, getIPBProgramme, getIPBVitrine, IPB_VITRINE_DEFAUT, parseGalerie } from '@/lib/queries';
 import { createIPBCours, updateIPBCours, deleteIPBCours, updateIPBVitrine, getIPBDocuments, addIPBDocument, deleteIPBDocument, setInscriptionStatut } from '@/lib/admin-queries';
 import { uploadPhoto, uploadPhotos, uploadFile, validatePhotos, validateFile, MAX_PHOTO_MB } from '@/lib/storage';
@@ -12,6 +12,9 @@ type CoursDoc = { id?: string; titre: string; fichier_url?: string; type?: strin
 type CoursForm = { id?: string; code: string; titre: string; niveau: string; prof: string; desc: string; modules: string; docs: CoursDoc[]; docsDeleted: string[] };
 type Inscription = {
   id: string; nom: string; email: string; telephone: string; date: string; statut: string;
+  // `date` est formatée pour l'affichage (fr-FR) ; on garde la valeur ISO brute
+  // pour le filtre par plage de dates.
+  created_at: string;
   profile_id?: string; compteNom?: string;
 };
 
@@ -339,6 +342,7 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ edit?: IPBCours } | null>(null);
   const [del, setDel] = useState<IPBCours | null>(null);
+  const [q, setQ] = useState('');
 
   useEffect(() => { getIPBCours().then(c => { setCours(c); setLoading(false); }).catch(() => setLoading(false)); }, []);
 
@@ -387,17 +391,27 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
 
   if (loading) return <div style={{ display: 'grid', gap: 10 }}>{[1,2,3].map(i => <div key={i} className="a-sk" style={{ height: 72, borderRadius: 12 }} />)}</div>;
 
+  const term = q.trim().toLowerCase();
+  const shown = cours.filter(c =>
+    !term || c.titre.toLowerCase().includes(term) || c.code.toLowerCase().includes(term) || c.prof.toLowerCase().includes(term)
+  );
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
         <button className="a-btn a-btn-primary" style={aStyle('ipb')} onClick={() => setModal({})}><AIcon n="plus" size={16} />Ajouter un cours</button>
       </div>
-      {cours.length === 0 ? <Empty icon="cap" title="Aucun cours" /> : (
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Rechercher un cours, un code, un professeur…" />
+      </Toolbar>
+      {cours.length === 0 ? <Empty icon="cap" title="Aucun cours" /> : shown.length === 0 ? (
+        <Empty icon="search" title="Aucun résultat" sub="Aucun cours ne correspond à cette recherche." />
+      ) : (
         <Panel accent="ipb" pad={false}>
           <table className="a-tbl">
             <thead><tr><th>Code</th><th>Cours</th><th>Professeur</th><th>Modules</th><th></th></tr></thead>
             <tbody>
-              {cours.map(c => (
+              {shown.map(c => (
                 <tr key={c.id}>
                   <td style={{ width: 80 }}><span className="a-codepill">{c.code}</span></td>
                   <td><div className="a-tprime">{c.titre}</div></td>
@@ -429,6 +443,9 @@ function CoursTab({ pushToast }: { pushToast: (m: string, a?: string) => void })
 function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => void }) {
   const [items, setItems] = useState<Inscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -448,6 +465,7 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
             email: (r.email as string) ?? '',
             telephone: (r.telephone as string) ?? '',
             date: new Date(r.created_at as string).toLocaleDateString('fr-FR'),
+            created_at: (r.created_at as string) ?? '',
             statut: (r.statut as string) ?? 'en_attente',
             profile_id: profile?.id,
             compteNom: profile?.nom_complet,
@@ -474,12 +492,26 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
   const TONE: Record<string, 'amber' | 'green' | 'red'> = { en_attente: 'amber', validee: 'green', refusee: 'red' };
   const LABEL: Record<string, string> = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
 
+  const term = q.trim().toLowerCase();
+  const shown = items.filter(ins =>
+    (!term || ins.nom.toLowerCase().includes(term) || ins.email.toLowerCase().includes(term)) &&
+    inDateRange(ins.created_at, from, to)
+  );
+
   return (
+    <>
+    <Toolbar>
+      <SearchInput value={q} onChange={setQ} placeholder="Rechercher un candidat, un email…" />
+      <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+    </Toolbar>
+    {shown.length === 0 ? (
+      <Empty icon="search" title="Aucun résultat" sub="Aucune inscription ne correspond à cette recherche ou à cette période." />
+    ) : (
     <Panel accent="ipb" pad={false}>
       <table className="a-tbl">
         <thead><tr><th>Candidat</th><th>Email</th><th>Téléphone</th><th>Date</th><th>Statut</th><th></th></tr></thead>
         <tbody>
-          {items.map(ins => (
+          {shown.map(ins => (
             <tr key={ins.id}>
               <td>
                 <div className="a-tprime">{ins.nom || '—'}</div>
@@ -506,18 +538,44 @@ function InscriptionsTab({ pushToast }: { pushToast: (m: string, a?: string) => 
         </tbody>
       </table>
     </Panel>
+    )}
+    </>
   );
 }
 
 export default function PageIPB() {
   const [tab, setTab] = useState('vitrine');
   const [toasts, pushToast] = useToasts();
+  // Compteurs du bandeau : requêtes count() dédiées, indépendantes de l'onglet
+  // affiché (les onglets Cours/Inscriptions ne sont montés qu'à leur ouverture).
+  const [stats, setStats] = useState({ cours: 0, inscriptions: 0, attente: 0 });
+
+  useEffect(() => {
+    (async () => {
+      const [coursRes, insRes, attRes] = await Promise.allSettled([
+        supabase.from('ipb_cours').select('id', { count: 'exact', head: true }),
+        supabase.from('ipb_inscriptions').select('id', { count: 'exact', head: true }),
+        supabase.from('ipb_inscriptions').select('id', { count: 'exact', head: true }).eq('statut', 'en_attente'),
+      ]);
+      setStats({
+        cours: coursRes.status === 'fulfilled' ? (coursRes.value.count ?? 0) : 0,
+        inscriptions: insRes.status === 'fulfilled' ? (insRes.value.count ?? 0) : 0,
+        attente: attRes.status === 'fulfilled' ? (attRes.value.count ?? 0) : 0,
+      });
+    })();
+  }, []);
 
   return (
     <div className="a-page wide a-pagefade" style={aStyle('ipb')}>
       <PageHead accent="ipb" icon="cap"
         eyebrow={<><span style={{ width: 8, height: 8, borderRadius: 9, background: 'var(--c)' }} />Module IPB</>}
         title="Institut Protestant de la Bible" sub="Gérez la vitrine, les cours et les inscriptions de l'IPB." />
+
+      <StatBand accent="ipb" stats={[
+        { l: 'Total cours', v: stats.cours, i: 'cap' },
+        { l: 'Total inscriptions', v: stats.inscriptions, i: 'users' },
+        { l: 'Inscriptions en attente', v: stats.attente, i: 'clock' },
+      ]} />
 
       <div style={{ marginBottom: 24 }}>
         <Seg active={tab} onPick={setTab} tabs={[
