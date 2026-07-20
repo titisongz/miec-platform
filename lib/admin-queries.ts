@@ -67,10 +67,30 @@ export async function getEnseignementsAdmin(): Promise<Enseignement[]> {
 export async function getSeriesAdmin(): Promise<Serie[]> {
   const { data, error } = await supabase
     .from('series')
-    .select('id, titre')
+    .select('id, titre, description')
     .order('created_at', { ascending: false });
   if (error) { logSupabaseError('getSeriesAdmin', error); return []; }
-  return (data ?? []).map(s => ({ id: s.id, titre: s.titre, n: 0, c: '', meta: '' }));
+
+  // Nombre d'enseignements par série : une seule requête (tous les serie_id)
+  // plutôt qu'un count() par série. Sert à l'affichage ET à l'avertissement
+  // avant suppression d'une série encore utilisée.
+  const { data: ens } = await supabase.from('enseignements').select('serie_id');
+  const counts: Record<string, number> = {};
+  (ens ?? []).forEach(e => {
+    if (e.serie_id) counts[e.serie_id as string] = (counts[e.serie_id as string] ?? 0) + 1;
+  });
+
+  return (data ?? []).map(s => {
+    const n = counts[s.id] ?? 0;
+    return {
+      id: s.id,
+      titre: s.titre,
+      description: s.description ?? '',
+      n,
+      c: '',
+      meta: `${n} message${n > 1 ? 's' : ''}`,
+    };
+  });
 }
 
 export async function getAnnoncesAdmin(): Promise<Annonce[]> {
@@ -211,10 +231,33 @@ export async function deleteEnseignement(id: string) {
 
 // ── Séries ────────────────────────────────────────────────────────────────────
 
-export async function createSerie(titre: string): Promise<string> {
-  const { data, error } = await supabase.from('series').insert({ titre }).select('id').single();
+export async function createSerie(titre: string, description?: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('series')
+    .insert({ titre, description: description || null })
+    .select('id')
+    .single();
   if (error) failSupabase('createSerie', error);
   return data.id;
+}
+
+export async function updateSerie(id: string, data: { titre?: string; description?: string }) {
+  const patch: Record<string, unknown> = {};
+  if (data.titre !== undefined) patch.titre = data.titre;
+  if (data.description !== undefined) patch.description = data.description || null;
+  const { error } = await supabase.from('series').update(patch).eq('id', id);
+  if (error) failSupabase('updateSerie', error);
+}
+
+/**
+ * Supprime une série. Les enseignements rattachés ne sont PAS supprimés :
+ * enseignements.serie_id est déclaré `on delete set null` (schema.sql), ils
+ * deviennent donc « sans série ». L'appelant doit avertir l'utilisateur quand
+ * la série contient encore des enseignements (cf. getSeriesAdmin().n).
+ */
+export async function deleteSerie(id: string) {
+  const { error } = await supabase.from('series').delete().eq('id', id);
+  if (error) failSupabase('deleteSerie', error);
 }
 
 // ── Témoignages — admin ───────────────────────────────────────────────────────

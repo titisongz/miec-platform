@@ -119,7 +119,7 @@ export async function getSeries(): Promise<Serie[]> {
   try {
     const { data, error } = await supabase
       .from('series')
-      .select('id, titre')
+      .select('id, titre, description')
       .order('created_at', { ascending: false });
 
     if (error || !data?.length) return DB.SERIES;
@@ -140,6 +140,7 @@ export async function getSeries(): Promise<Serie[]> {
       return {
         id: s.id,
         titre: s.titre,
+        description: s.description ?? '',
         n,
         c: '',
         meta: `${n} message${n > 1 ? 's' : ''}`,

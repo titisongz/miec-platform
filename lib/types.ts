@@ -58,7 +58,10 @@ export interface Enseignement {
   texte?: string;
 }
 
-export interface Serie { id: string; titre: string; n: number; c: string; meta: string }
+export interface Serie {
+  id: string; titre: string; n: number; c: string; meta: string;
+  description?: string;
+}
 
 export interface Temoignage {
   id: string; titre: string; auteur: string; date: string;

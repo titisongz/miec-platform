@@ -28,6 +28,26 @@ function GoogleLogo({ size = 18 }: { size?: number }) {
   );
 }
 
+// Favoris : nombre affiché avant dépliage, et hauteur approximative d'une carte
+// (row-card + gap) servant à calculer la hauteur max de l'animation.
+const FAV_PREVIEW = 2;
+const FAV_ROW_H = 76;
+
+function FavCard({ fv, onOpen }: { fv: FavItem; onOpen: (t: string, i: unknown) => void }) {
+  return (
+    <button className="card tap row-card" style={{ ...accentStyle(fv.accent), width: '100%', textAlign: 'left' }} onClick={() => onOpen(fv.type, fv.item)}>
+      <span style={{ width: 42, height: 42, borderRadius: 11, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+        <Icon n={fv.icon} size={19} />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fv.title}</div>
+        <div className="t3" style={{ fontSize: 11.5, fontWeight: 600 }}>{fv.label}</div>
+      </div>
+      <Icon n="heart" size={18} fill="currentColor" style={{ color: 'var(--c)' }} />
+    </button>
+  );
+}
+
 export function AuthScreen({ mode: initial = 'login', onLogin }: {
   mode?: string; onLogin: () => void;
 }) {
@@ -288,6 +308,9 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
   initials?: string;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  // Déclaré AVANT le retour anticipé ci-dessous : l'ordre des hooks doit rester
+  // identique à chaque rendu.
+  const [favsOpen, setFavsOpen] = useState(false);
   if (role === 'visiteur') return <AuthScreen onLogin={onLogin} />;
   const etu = etudiantIpb;
   // Données fictives retirées. À brancher sur les vraies contributions /
@@ -342,20 +365,42 @@ export default function PageCompte({ role, onLogin, favs, onOpen, onNav, notif, 
       <div className="section-h" style={{ margin: '22px 16px 12px' }}><h2 style={{ fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><Icon n="heart" size={18} />Favoris</h2></div>
       {favs.length ? (
         <div className="list" style={{ paddingTop: 0 }}>
-          {favs.map((fv, i) => (
-            <Reveal key={i} delay={i * 40}>
-              <button className="card tap row-card" style={{ ...accentStyle(fv.accent), width: '100%', textAlign: 'left' }} onClick={() => onOpen(fv.type, fv.item)}>
-                <span style={{ width: 42, height: 42, borderRadius: 11, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                  <Icon n={fv.icon} size={19} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fv.title}</div>
-                  <div className="t3" style={{ fontSize: 11.5, fontWeight: 600 }}>{fv.label}</div>
-                </div>
-                <Icon n="heart" size={18} fill="currentColor" style={{ color: 'var(--c)' }} />
-              </button>
+          {favs.slice(0, FAV_PREVIEW).map((fv, i) => (
+            <Reveal key={fv.type + fv.id} delay={i * 40}>
+              <FavCard fv={fv} onOpen={onOpen} />
             </Reveal>
           ))}
+
+          {/* Repliable : les favoris au-delà des 2 premiers. La hauteur max est
+              calculée d'après le nombre d'éléments cachés — une valeur fixe
+              tronquerait la liste au-delà d'une poignée de favoris. */}
+          {favs.length > FAV_PREVIEW && (
+            <>
+              <div style={{
+                maxHeight: favsOpen ? favs.length * FAV_ROW_H : 0,
+                overflow: 'hidden',
+                transition: 'max-height .4s var(--ease)',
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {favs.slice(FAV_PREVIEW).map(fv => (
+                    <FavCard key={fv.type + fv.id} fv={fv} onOpen={onOpen} />
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => setFavsOpen(o => !o)}
+                aria-expanded={favsOpen}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: 7, padding: '11px 14px', borderRadius: 12, background: 'var(--bg-soft)',
+                  border: '1px solid var(--line)', fontSize: 13.5, fontWeight: 700,
+                  color: 'var(--ink-2)', marginTop: 2,
+                }}>
+                {favsOpen ? 'Voir moins' : `Voir plus (${favs.length - FAV_PREVIEW})`}
+                <Icon n="cd" size={16} style={{ transform: favsOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s var(--ease)' }} />
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="section" style={{ paddingTop: 0 }}>

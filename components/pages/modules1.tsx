@@ -35,6 +35,7 @@ export function PageEnseignements({ onOpen }: { onOpen: (t: string, i: unknown) 
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [theme, setTheme] = useState('Tous');
+  const [serie, setSerie] = useState('Toutes');
 
   useEffect(() => {
     Promise.all([getEnseignements(), getSeries()]).then(([ens, ser]) => {
@@ -46,7 +47,11 @@ export function PageEnseignements({ onOpen }: { onOpen: (t: string, i: unknown) 
 
   const { items: found, searching } = useSupabaseSearch(q, all, searchEnseignements);
   const themes = ['Tous', ...Array.from(new Set(all.map(e => e.theme).filter(Boolean)))];
-  const items = found.filter(e => theme === 'Tous' || e.theme === theme);
+  // Recherche, thème et série se combinent (ET logique), comme au back-office.
+  const items = found.filter(e =>
+    (theme === 'Tous' || e.theme === theme) &&
+    (serie === 'Toutes' || e.serie === serie)
+  );
 
   return (
     <div className="screen pagefade" style={accentStyle('ens')}>
@@ -58,22 +63,44 @@ export function PageEnseignements({ onOpen }: { onOpen: (t: string, i: unknown) 
         <>
           {!q && (
             <>
-              <div className="section-h" style={{ marginBottom: 8 }}><h2 style={{ fontSize: 17 }}>Séries</h2></div>
+              <div className="section-h" style={{ marginBottom: 8 }}>
+                <h2 style={{ fontSize: 17 }}>Séries</h2>
+                {serie !== 'Toutes' && (
+                  <button onClick={() => setSerie('Toutes')} className="t3" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-i)' }}>
+                    Tout afficher
+                  </button>
+                )}
+              </div>
               <div className="chiprow" style={{ gap: 12, paddingBottom: 6 }}>
-                {series.map((s, i) => (
-                  <Reveal key={s.id} delay={i * 50} style={{ flex: '0 0 auto' }}>
-                    <button className="card tap" style={{ width: 172, textAlign: 'left', padding: 14 }} onClick={() => setQ('')}>
-                      <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--c-t)', color: 'var(--c-i)', display: 'grid', placeItems: 'center', marginBottom: 24 }}><Icon n="book" size={18} /></span>
-                      <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-.01em', lineHeight: 1.2, marginBottom: 4 }}>{s.titre}</div>
-                      <div className="t3" style={{ fontSize: 11.5, fontWeight: 600 }}>{s.meta} · {s.n} messages</div>
-                    </button>
-                  </Reveal>
-                ))}
+                {series.map((s, i) => {
+                  // La carte agit comme un filtre : un second clic la désélectionne.
+                  const on = serie === s.titre;
+                  return (
+                    <Reveal key={s.id} delay={i * 50} style={{ flex: '0 0 auto' }}>
+                      <button className="card tap" aria-pressed={on}
+                        onClick={() => setSerie(on ? 'Toutes' : s.titre)}
+                        style={{
+                          width: 172, textAlign: 'left', padding: 14,
+                          borderColor: on ? 'var(--c)' : undefined,
+                          background: on ? 'var(--c-t)' : undefined,
+                          transition: 'background .2s, border-color .2s',
+                        }}>
+                        <span style={{ width: 34, height: 34, borderRadius: 10, background: on ? 'var(--c)' : 'var(--c-t)', color: on ? '#fff' : 'var(--c-i)', display: 'grid', placeItems: 'center', marginBottom: 24, transition: 'background .2s, color .2s' }}>
+                          <Icon n={on ? 'check' : 'book'} size={18} />
+                        </span>
+                        <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-.01em', lineHeight: 1.2, marginBottom: 4 }}>{s.titre}</div>
+                        <div className="t3" style={{ fontSize: 11.5, fontWeight: 600 }}>{s.meta}</div>
+                      </button>
+                    </Reveal>
+                  );
+                })}
               </div>
             </>
           )}
           <div className="section-h" style={{ marginBottom: 6 }}>
-            <h2 style={{ fontSize: 17 }}>{q ? 'Résultats' : 'Tous les enseignements'}</h2>
+            <h2 style={{ fontSize: 17 }}>
+              {q ? 'Résultats' : serie !== 'Toutes' ? `Série « ${serie} »` : 'Tous les enseignements'}
+            </h2>
             {searching && <Spinner />}
           </div>
           {items.length
