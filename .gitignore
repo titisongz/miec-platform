@@ -24,6 +24,14 @@ public/worker-*.js
 /blob-report/
 /playwright/.cache/
 
+# typescript — fichiers régénérés à chaque compilation, jamais édités à la main
+# tsconfig.tsbuildinfo : cache du mode incrémental de tsc.
+# next-env.d.ts : généré par `next dev`/`next build` (le fichier le dit lui-même) ;
+#   il référence .next/types/routes.d.ts, qui n'existe qu'après un build — le
+#   versionner n'apporte donc rien et crée du bruit à chaque montée de version.
+tsconfig.tsbuildinfo
+next-env.d.ts
+
 # vercel
 .vercel
 
