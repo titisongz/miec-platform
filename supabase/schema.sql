@@ -359,14 +359,24 @@ create table public.favoris (
 -- ────────────────────────────────────────────────────────────
 -- 5. TRIGGER — création automatique du profil à l'inscription
 -- ────────────────────────────────────────────────────────────
+-- Crée le profil applicatif à chaque inscription, quel que soit le fournisseur
+-- (email/mot de passe comme OAuth). Les clés de métadonnées diffèrent selon la
+-- provenance : 'nom_complet' est envoyée par notre formulaire de signup,
+-- 'full_name'/'name' par Google. Cf. supabase/fix-google-oauth-profil.sql.
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id, nom_complet)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'nom_complet', new.email)
-  );
+    coalesce(
+      nullif(trim(new.raw_user_meta_data->>'nom_complet'), ''),
+      nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+      nullif(trim(new.raw_user_meta_data->>'name'), ''),
+      new.email
+    )
+  )
+  on conflict (id) do nothing;
   return new;
 end;
 $$;

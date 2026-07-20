@@ -15,6 +15,19 @@ const EYE_BTN: React.CSSProperties = {
   display: 'grid', placeItems: 'center', color: 'var(--ink-2)', cursor: 'pointer',
 };
 
+// Logo Google officiel (4 couleurs de la marque). Inline pour éviter toute
+// requête réseau et rester net quel que soit le thème.
+function GoogleLogo({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true" focusable="false" style={{ flex: '0 0 auto' }}>
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
 export function AuthScreen({ mode: initial = 'login', onLogin }: {
   mode?: string; onLogin: () => void;
 }) {
@@ -34,6 +47,23 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
     if (msg.includes('Password should be') || msg.includes('password')) return 'Le mot de passe doit faire au moins 6 caractères.';
     if (msg.includes('rate limit') || msg.includes('over_email')) return 'Trop de tentatives. Réessayez dans quelques minutes.';
     return 'Une erreur est survenue. Réessayez.';
+  }
+
+  // Connexion Google (OAuth 2.0 / PKCE). signInWithOAuth redirige le navigateur
+  // vers Google ; au retour, Supabase renvoie sur /auth/callback?code=… que la
+  // route serveur échange contre une session (exchangeCodeForSession). On ne
+  // remet donc `busy` à false qu'en cas d'échec : sinon la page a déjà navigué.
+  async function google() {
+    setBusy(true);
+    setErr('');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setBusy(false);
+      setErr('Connexion Google impossible pour le moment. Réessayez.');
+    }
   }
 
   async function go() {
@@ -108,6 +138,26 @@ export function AuthScreen({ mode: initial = 'login', onLogin }: {
         </Reveal>
       </div>
       <div style={{ padding: '26px 24px 0' }}>
+        <Reveal delay={60}>
+          <button type="button" onClick={google} disabled={busy}
+            style={{
+              width: '100%', height: 50, borderRadius: 14, cursor: busy ? 'default' : 'pointer',
+              background: 'var(--surface)', border: '1.5px solid var(--line-2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', color: 'var(--ink)',
+              opacity: busy ? .6 : 1, transition: 'opacity .2s, border-color .2s',
+            }}>
+            <GoogleLogo size={19} />
+            Continuer avec Google
+          </button>
+
+          {/* Séparateur « ou » entre OAuth et le formulaire email/mot de passe */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }} aria-hidden="true">
+            <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+            <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>ou</span>
+            <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+          </div>
+        </Reveal>
         <Reveal delay={80}>
           {signup && (
             <label style={{ display: 'block', marginBottom: 13 }}>

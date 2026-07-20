@@ -3,11 +3,15 @@ import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 
-// Callback de confirmation email Supabase.
-// Gère les DEUX flux possibles selon le template d'email du projet :
+// Callback d'authentification Supabase — confirmation email ET OAuth (Google).
+// Gère les flux possibles :
 //   1. PKCE      → paramètre `code`        → exchangeCodeForSession (même navigateur requis)
 //   2. OTP/verify → `token_hash` + `type`  → verifyOtp (fonctionne cross-device)
-// Dans les deux cas la session est écrite dans les cookies de la réponse,
+// La connexion Google emprunte le flux 1 : signInWithOAuth (compte.tsx) renvoie
+// ici avec `code`. Le vérificateur PKCE est lisible côté serveur car le client
+// navigateur est créé avec createBrowserClient (@supabase/ssr), qui le stocke
+// dans un cookie et non dans localStorage.
+// Dans tous les cas la session est écrite dans les cookies de la réponse,
 // puis App.tsx (client) la lit via getSession() au rechargement de '/'.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -16,6 +20,19 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get('type') as EmailOtpType | null;
   // `next` permet de revenir sur une page précise ; sinon l'accueil.
   const next = searchParams.get('next') ?? '/';
+
+  // Erreur renvoyée par le fournisseur lui-même (refus de consentement, mais
+  // aussi redirect_uri mal configurée côté Google/Supabase — la cause la plus
+  // fréquente lors de la mise en place). On la journalise : sans cela l'échec
+  // est silencieux et impossible à diagnostiquer.
+  const providerError = searchParams.get('error');
+  if (providerError) {
+    console.error(
+      `[auth/callback] erreur du fournisseur: ${providerError}`,
+      searchParams.get('error_description') ?? '',
+    );
+    return NextResponse.redirect(new URL('/?auth_error=1', origin));
+  }
 
   const cookieStore = await cookies();
   const supabase = createServerClient(
